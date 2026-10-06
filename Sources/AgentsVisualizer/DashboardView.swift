@@ -23,7 +23,7 @@ struct DashboardView: View {
                         }
                         .environment(\.dashboardClock, context.date)
                     }
-                    .animation(.snappy, value: projects)
+                    .animation(.snappy, value: projects.map { [$0.id] + $0.sessions.map(\.layoutKey) })
                 }
             }
             .padding(20)
@@ -67,6 +67,17 @@ struct DashboardView: View {
             Text(verbatim: model.errorMessage ?? "")
         }
     }
+}
+
+// Animation keys: what adds, removes, reorders or restyles rows. Activity text and timestamps are left out on
+// purpose: they change on nearly every refresh while sessions work, and an animated refresh re-lays out the
+// whole dashboard on every frame of the animation.
+extension AgentInfo {
+    var layoutKey: String { "\(id) \(status.rawValue)" }
+}
+
+extension SessionInfo {
+    var layoutKey: String { ([id, status.rawValue] + agents.map(\.layoutKey)).joined(separator: " ") }
 }
 
 /// Global counters: the "how is everything going" answer before reading any card.
@@ -236,6 +247,13 @@ struct MasonryLayout: Layout {
                           proposal: ProposedViewSize(width: frame.width, height: frame.height))
         }
     }
+
+    // No explicit guides: the default merges every card's guides, which lays out every card again whenever the
+    // enclosing stack aligns this layout, i.e. on every refresh. No card defines a custom guide.
+    func explicitAlignment(of guide: HorizontalAlignment, in bounds: CGRect, proposal: ProposedViewSize,
+                           subviews: Subviews, cache: inout ()) -> CGFloat? { nil }
+    func explicitAlignment(of guide: VerticalAlignment, in bounds: CGRect, proposal: ProposedViewSize,
+                           subviews: Subviews, cache: inout ()) -> CGFloat? { nil }
 
     private func arrange(width: CGFloat, subviews: Subviews) -> [CGRect] {
         let columns = max(1, Int((width + spacing) / (columnWidth + spacing)))
