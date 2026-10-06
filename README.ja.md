@@ -70,7 +70,7 @@ open "build/Claude Code Agents Visualizer.app"
 
 | データ | 用途 |
 | --- | --- |
-| `~/.claude/sessions/<pid>.json` | 稼働中のプロセスとその状態（`busy` / `waiting` / `idle`）。PID はプロセスの開始時刻と照合するため、再利用された PID で終了済みのセッションが稼働中に見えることはありません。 |
+| `~/.claude/sessions/<pid>.json` | 稼働中のプロセスとその状態（`busy` / `waiting` / `idle`）。PID は、プロセスの開始時刻がセッションの登録時刻（Claude Code が記録する `startedAt`）より前の場合だけ有効とみなすため、再利用された PID で終了済みのセッションが稼働中に見えることはありません。 |
 | `~/Library/Application Support/Claude/claude-code-sessions/…` | Claude for Mac のセッション一覧（タイトル、ディープリンク用の ID、アーカイブ、プルリクエスト）。 |
 | `~/.claude/projects/<project>/<session>.jsonl` | 作業ディレクトリ、ブランチ、最初のプロンプト、実行中のツール、サブエージェント（`<session>/subagents/`）。セッションの情報はトランスクリプトの先頭と末尾の 512 KB から読みます。サブエージェントを追跡するため、サブエージェントのある稼働中セッションのトランスクリプトは `<task-notification>` を探して一度だけ全体を（8 MB 単位で）走査し、以降は追記された部分だけを読みます。変更のないファイルは読み直しません。 |
 

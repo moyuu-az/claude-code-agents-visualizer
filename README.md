@@ -68,7 +68,7 @@ The app is **read-only** and makes **no network requests**. Every 2 seconds it r
 
 | Source | Used for |
 | --- | --- |
-| `~/.claude/sessions/<pid>.json` | Which sessions have a live process and their status (`busy` / `waiting` / `idle`). PIDs are checked against the process start time, so a recycled PID never shows a dead session as live. |
+| `~/.claude/sessions/<pid>.json` | Which sessions have a live process and their status (`busy` / `waiting` / `idle`). A PID only counts if its process started before the session registered (the `startedAt` Claude Code records), so a recycled PID does not make a dead session look live. |
 | `~/Library/Application Support/Claude/claude-code-sessions/…` | Claude for Mac's session list: titles, desktop ids for deep links, archived flags, pull requests. |
 | `~/.claude/projects/<project>/<session>.jsonl` | Everything else: working directory, branch, first prompt, the tool in flight, subagents (`<session>/subagents/`). Session details come from the first and last 512 KB of a transcript. To track subagents, the transcript of a live session that has any is also scanned once for `<task-notification>` entries (in 8 MB chunks), then only the bytes appended since. Unchanged files are not re-read. |
 
