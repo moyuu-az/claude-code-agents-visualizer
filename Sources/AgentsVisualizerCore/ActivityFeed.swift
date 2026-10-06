@@ -60,8 +60,9 @@ public enum ActivityFeed {
                     switch (earlier[agent.id]?.status, agent.status) {
                     case (nil, .running):
                         events.append(event(.agentSpawned, agent: agent))
-                    case (nil, let status):
-                        // Started and finished between two refreshes.
+                    case (nil, let status) where before.status.isLive:
+                        // Started and finished between two refreshes. Only a live session's agent list is complete:
+                        // ended sessions list none (SnapshotBuilder), so on resume the whole history reappears.
                         events.append(event(.agentFinished(status), agent: agent))
                     case (.running?, let status) where status != .running:
                         events.append(event(.agentFinished(status), agent: agent))

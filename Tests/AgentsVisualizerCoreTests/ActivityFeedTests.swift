@@ -59,6 +59,22 @@ import Testing
         #expect(kinds(s2, s2).isEmpty)
     }
 
+    // Ended sessions carry no agents (SnapshotBuilder lists them only for live sessions), so a resumed session's
+    // whole subagent history shows up at once. That history is not something that just happened.
+    @Test func resumedSessionDoesNotReplayItsAgentHistory() {
+        let ended = snapshot([makeSession(status: .ended)])
+        let resumed = snapshot([makeSession(status: .idle, agents: [agent("a", .completed), agent("b", .interrupted)])])
+        #expect(kinds(ended, resumed) == [.sessionStarted])
+        let busy = snapshot([makeSession(status: .running, agents: [agent("c", .running), agent("a", .completed)])])
+        #expect(kinds(ended, busy) == [.sessionStarted, .agentSpawned])
+    }
+
+    @Test func agentStartedAndFinishedBetweenRefreshes() {
+        let s0 = snapshot([makeSession(status: .running)])
+        let s1 = snapshot([makeSession(status: .running, agents: [agent("a", .completed)])])
+        #expect(kinds(s0, s1) == [.agentFinished(.completed)])
+    }
+
     @Test func eventsCarryContext() throws {
         let old = snapshot([makeSession(title: "Ship it", status: .running)])
         let new = snapshot([makeSession(title: "Ship it", status: .running, agents: [agent("x", .running)])])
