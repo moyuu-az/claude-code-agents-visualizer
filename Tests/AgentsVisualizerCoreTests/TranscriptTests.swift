@@ -90,6 +90,14 @@ private func data(_ objects: [[String: Any]]) -> Data {
         #expect(summary.startedAt == nil)
     }
 
+    @Test(arguments: [
+        ("2020-01-01T00:00:00Z", true), ("2019-12-31T23:59:59.999Z", false),
+        ("2100-01-01T00:00:00.000Z", true), ("2100-01-01T00:00:00.001Z", false),
+    ])
+    func plausibleTimestampBounds(string: String, accepted: Bool) {
+        #expect((Timestamp.parse(string) != nil) == accepted)
+    }
+
     @Test func detachedHeadIsNotABranch() {
         #expect(tail([Line.user("x", branch: "HEAD")]).gitBranch == nil)
     }
