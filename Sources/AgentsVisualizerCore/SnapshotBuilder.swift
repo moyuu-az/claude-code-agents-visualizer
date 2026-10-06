@@ -75,8 +75,8 @@ public final class SnapshotBuilder {
         }
 
         let agents: [AgentInfo]
-        if let transcript, live != nil {
-            agents = subagents.agents(forSessionTranscript: transcript, sessionAlive: true)
+        if let transcript, let live {
+            agents = subagents.agents(forSessionTranscript: transcript, sessionAlive: true, processStartedAt: live.startedAt)
         } else {
             agents = []
         }

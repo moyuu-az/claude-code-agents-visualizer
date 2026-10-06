@@ -43,8 +43,12 @@ enum SubagentStatusResolver {
     /// - The agent transcript is authoritative when it shows a clean finish or a user interrupt.
     /// - A parent notice only counts if it is not older than the agent's last entry: an agent that was resumed
     ///   with SendMessage after a notice is running again.
-    /// - Anything unfinished in a session whose process is gone was cut off, not running.
-    static func resolve(turnState: TurnState, lastEntryAt: Date?, notice: TaskNotice?, sessionAlive: Bool) -> AgentStatus {
+    /// - Anything unfinished in a session whose process is gone was cut off, not running. The same holds when the
+    ///   session is alive again in a newer process (resumed after a crash or an app restart): agents run inside the
+    ///   process that spawned them, so one last heard from before the current process started died with the old one.
+    static func resolve(
+        turnState: TurnState, lastEntryAt: Date?, notice: TaskNotice?, sessionAlive: Bool, processStartedAt: Date? = nil
+    ) -> AgentStatus {
         switch turnState {
         case .finished: return .completed
         case .interrupted: return .stopped
@@ -57,6 +61,7 @@ enum SubagentStatusResolver {
             }
             if noticeIsCurrent { return notice.agentStatus }
         }
+        if let processStartedAt, let lastEntryAt, lastEntryAt < processStartedAt { return .interrupted }
         return sessionAlive ? .running : .interrupted
     }
 }
@@ -155,7 +160,9 @@ final class SubagentScanner {
     /// Transcript URLs read by this scanner during the current pass (so the shared reader keeps them cached).
     var touchedTranscripts: Set<URL> { touched }
 
-    func agents(forSessionTranscript transcript: URL, sessionAlive: Bool) -> [AgentInfo] {
+    /// - Parameter processStartedAt: When the session's current process registered; agents last seen before that
+    ///   belonged to an earlier process of the same (resumed) session.
+    func agents(forSessionTranscript transcript: URL, sessionAlive: Bool, processStartedAt: Date? = nil) -> [AgentInfo] {
         let directory = transcript.deletingPathExtension().appending(path: "subagents", directoryHint: .isDirectory)
         let files = FileManager.default.children(of: directory)
         let agentTranscripts = files.filter { $0.lastPathComponent.hasPrefix("agent-") && $0.pathExtension == "jsonl" }
@@ -173,7 +180,7 @@ final class SubagentScanner {
             guard let summary = transcripts.summary(of: url) else { continue }
             let status = SubagentStatusResolver.resolve(
                 turnState: summary.turnState, lastEntryAt: summary.lastActivityAt,
-                notice: parentNotices[id], sessionAlive: sessionAlive)
+                notice: parentNotices[id], sessionAlive: sessionAlive, processStartedAt: processStartedAt)
             agents.append(AgentInfo(
                 id: id,
                 agentType: meta?.agentType ?? "agent",

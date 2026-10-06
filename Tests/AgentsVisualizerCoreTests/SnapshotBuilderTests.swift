@@ -126,6 +126,27 @@ import Testing
         #expect(snapshot.allSessions.map(\.title) == ["Archived but busy"])
     }
 
+    @Test func agentsCutOffInAnEarlierProcessAreNotRunning() throws {
+        let repo = fixture.url("code/app").path
+        try fixture.makeDirectory("code/app/.git")
+        // Resumed 10 minutes ago in a new process (`register` sets startedAt to now - 600s).
+        try register(pid: 5, session: uuidA, cwd: repo, status: "idle")
+        try transcript("-code-app", uuidA, [Line.user("go", at: now.addingTimeInterval(-7200), cwd: repo)])
+        let subagents = ".claude/projects/-code-app/\(uuidA)/subagents"
+        try fixture.writeJSONL("\(subagents)/agent-old.jsonl", [
+            Line.user("x", at: now.addingTimeInterval(-3700)),
+            Line.assistantTool("Bash", input: ["command": "sleep 999"], at: now.addingTimeInterval(-3600)),
+        ])
+        try fixture.writeJSONL("\(subagents)/agent-new.jsonl", [
+            Line.user("y", at: now.addingTimeInterval(-60)),
+            Line.assistantTool("Bash", input: ["command": "make"], at: now.addingTimeInterval(-30)),
+        ])
+        let session = try #require(build(alive: [5]).allSessions.first)
+        #expect(session.agents.map(\.id) == ["new", "old"])
+        #expect(session.agents.map(\.status) == [.running, .interrupted])
+        #expect(session.runningAgentCount == 1)
+    }
+
     @Test func liveSessionWithoutTranscriptYetStillShows() throws {
         try register(pid: 9, session: uuidA, cwd: fixture.url("fresh").path, status: "idle", extra: ["hostSessionId": "local_new"])
         let session = try #require(build(alive: [9]).allSessions.first)

@@ -20,6 +20,24 @@ import Testing
         #expect(SubagentStatusResolver.resolve(turnState: .inProgress, lastEntryAt: t0, notice: nil, sessionAlive: false) == .interrupted)
     }
 
+    @Test func unfinishedAgentOfAnEarlierProcessWasInterrupted() {
+        // The session was resumed in a new process (crash, app restart); agents die with the process that ran them.
+        let restartedAt = t0.addingTimeInterval(60)
+        func resolve(lastEntryAt: Date?, notice: TaskNotice? = nil, processStartedAt: Date?) -> AgentStatus {
+            SubagentStatusResolver.resolve(turnState: .inProgress, lastEntryAt: lastEntryAt, notice: notice,
+                                           sessionAlive: true, processStartedAt: processStartedAt)
+        }
+        #expect(resolve(lastEntryAt: t0, processStartedAt: restartedAt) == .interrupted)
+        #expect(resolve(lastEntryAt: restartedAt, processStartedAt: restartedAt) == .running)
+        #expect(resolve(lastEntryAt: restartedAt.addingTimeInterval(1), processStartedAt: restartedAt) == .running)
+        // Without both timestamps there is nothing to compare: keep trusting the live session.
+        #expect(resolve(lastEntryAt: t0, processStartedAt: nil) == .running)
+        #expect(resolve(lastEntryAt: nil, processStartedAt: restartedAt) == .running)
+        // A current notice is still more specific than "cut off".
+        #expect(resolve(lastEntryAt: t0, notice: TaskNotice(status: "completed", at: t0.addingTimeInterval(5)),
+                        processStartedAt: restartedAt) == .completed)
+    }
+
     @Test(arguments: [("completed", AgentStatus.completed), ("failed", .failed), ("killed", .stopped), ("stopped", .stopped)])
     func currentNoticeEndsTheAgent(status: String, expected: AgentStatus) {
         let notice = TaskNotice(status: status, at: t0.addingTimeInterval(5))
