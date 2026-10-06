@@ -25,13 +25,23 @@ func makeSession(
                 == "claude://resume?session=4b8a9872-18af-4471-b2cf-eb5301cdaff3")
     }
 
-    @Test(arguments: ["local_x&source=evil", "local_../../etc", "local_", "remote_abc", "local_" + String(repeating: "a", count: 65)])
+    @Test(arguments: [
+        "local_x&source=evil", "local_../../etc", "local_", "remote_abc", "local_" + String(repeating: "a", count: 65),
+        "local_abc\n", "local_abc%26x=1", "local_a\u{301}", "local_ab\u{FF21}", " local_abc",
+    ])
     func malformedDesktopIdsAreNeverPutInAUrl(desktopId: String) {
         let url = ClaudeDeepLink.url(for: makeSession(desktopId: desktopId))
         #expect(url?.absoluteString == "claude://resume?session=4b8a9872-18af-4471-b2cf-eb5301cdaff3")
     }
 
-    @Test(arguments: ["not-a-uuid", "4b8a9872-18af-4471-b2cf-eb5301cdaff3&x=1", ""])
+    @Test func longestValidDesktopIdIsAccepted() {
+        let desktopId = "local_" + String(repeating: "a", count: 64)
+        #expect(ClaudeDeepLink.url(for: makeSession(desktopId: desktopId))?.absoluteString
+                == "claude://code/continue?session=\(desktopId)")
+    }
+
+    @Test(arguments: ["not-a-uuid", "4b8a9872-18af-4471-b2cf-eb5301cdaff3&x=1", "", "4b8a9872-18af-4471-b2cf-eb5301cdaff3\n",
+                      "4b8a9872-18af-4471-b2cf-eb5301cdaff3; rm -rf ~"])
     func noValidIdMeansNoUrl(id: String) {
         #expect(ClaudeDeepLink.url(for: makeSession(id: id)) == nil)
         #expect(ClaudeDeepLink.resumeCommand(for: makeSession(id: id)) == nil)
@@ -41,6 +51,12 @@ func makeSession(
         let session = makeSession(cwd: "/Users/me/it's here")
         #expect(ClaudeDeepLink.resumeCommand(for: session)
                 == #"cd '/Users/me/it'\''s here' && claude --resume 4b8a9872-18af-4471-b2cf-eb5301cdaff3"#)
+    }
+
+    @Test func resumeCommandNeutralisesShellSyntaxInThePath() {
+        let session = makeSession(cwd: "/tmp/$(touch pwned)`id`;echo")
+        #expect(ClaudeDeepLink.resumeCommand(for: session)
+                == "cd '/tmp/$(touch pwned)`id`;echo' && claude --resume 4b8a9872-18af-4471-b2cf-eb5301cdaff3")
     }
 }
 

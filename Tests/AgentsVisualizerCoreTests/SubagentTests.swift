@@ -192,6 +192,16 @@ import Testing
         #expect(agents.map(\.status) == [.interrupted])
     }
 
+    @Test func brokenMetaFallsBackToDefaults() throws {
+        let parent = try fixture.writeJSONL("\(session).jsonl", [Line.user("go")])
+        try fixture.write("\(session)/subagents/agent-b.meta.json", #"{"agentType": 42, "description": "#)
+        try fixture.writeJSONL("\(session)/subagents/agent-b.jsonl", [Line.user("Do the thing"), Line.assistantText("done")])
+        let agents = SubagentScanner(transcripts: TranscriptReader()).agents(forSessionTranscript: parent, sessionAlive: true)
+        #expect(agents.map(\.agentType) == ["agent"])
+        #expect(agents.map(\.description) == ["Do the thing"])
+        #expect(agents.map(\.status) == [.completed])
+    }
+
     @Test func sessionWithoutSubagents() throws {
         let parent = try fixture.writeJSONL("\(session).jsonl", [Line.user("go")])
         #expect(SubagentScanner(transcripts: TranscriptReader()).agents(forSessionTranscript: parent, sessionAlive: true).isEmpty)

@@ -213,6 +213,18 @@ private func data(_ objects: [[String: Any]]) -> Data {
         #expect(summary.turnState == .finished)
     }
 
+    @Test func linesLargerThanBothWindowsDoNotBreakTheSummary() throws {
+        // A pasted log as the first prompt and a huge tool output as the last entry: neither window holds a whole line.
+        let huge = String(repeating: "y", count: TranscriptReader.headBytes + 1024)
+        let url = try fixture.writeJSONL("t.jsonl", [
+            Line.user(huge, cwd: "/repo"), Line.assistantText("ok"), ["type": "attachment", "content": huge],
+        ])
+        let summary = try #require(TranscriptReader().summary(of: url))
+        #expect(summary.firstPrompt == nil)
+        #expect(summary.turnState == .unknown)
+        #expect(summary.lastActivityAt != nil)  // falls back to the file's mtime
+    }
+
     @Test func fallsBackToModificationTimeForActivity() throws {
         let url = try fixture.writeJSONL("t.jsonl", [["type": "mode", "mode": "normal"]])
         let summary = try #require(TranscriptReader().summary(of: url))
