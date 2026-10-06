@@ -100,5 +100,6 @@ process.executableURL = URL(fileURLWithPath: "/usr/bin/iconutil")
 process.arguments = ["-c", "icns", iconset.path, "-o", output.path]
 try process.run()
 process.waitUntilExit()
+try? FileManager.default.removeItem(at: iconset)
 guard process.terminationStatus == 0 else { fatalError("iconutil failed") }
 print("Wrote \(output.path)")
