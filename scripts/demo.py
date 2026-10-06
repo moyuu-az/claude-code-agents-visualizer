@@ -31,15 +31,15 @@ def user(text, offset, cwd, branch="main"):
             "message": {"role": "user", "content": text}}
 
 
-def tool(name, tool_input, offset, mid="m1"):
+def tool(name, tool_input, offset, mid="m1", model="claude-opus-5-5"):
     return {"type": "assistant", "timestamp": iso(offset),
-            "message": {"id": mid, "role": "assistant", "stop_reason": "tool_use",
+            "message": {"id": mid, "role": "assistant", "stop_reason": "tool_use", "model": model,
                         "content": [{"type": "tool_use", "id": "t1", "name": name, "input": tool_input}]}}
 
 
-def done(text, offset, mid="m2"):
+def done(text, offset, mid="m2", model="claude-opus-5-5"):
     return {"type": "assistant", "timestamp": iso(offset),
-            "message": {"id": mid, "role": "assistant", "stop_reason": "end_turn",
+            "message": {"id": mid, "role": "assistant", "stop_reason": "end_turn", "model": model,
                         "content": [{"type": "text", "text": text}]}}
 
 
@@ -94,13 +94,16 @@ def main():
                 body = [user(description, -started * 60, cwd)]
                 # Running agents must have written after their session's process registered (it is spawned below);
                 # older entries would count as cut off by a previous process.
-                body.append(tool("Grep", {"pattern": "--color-"}, 5) if state == "running" else done("Done.", -60))
+                agent_model = "claude-haiku-4-5" if agent_type == "Explore" else "claude-sonnet-5-5"
+                body.append(tool("Grep", {"pattern": "--color-"}, 5, model=agent_model) if state == "running"
+                            else done("Done.", -60, model=agent_model))
                 (adir / f"agent-{aid}.jsonl").write_text("\n".join(json.dumps(l) for l in body) + "\n")
 
             if surface == "desktop":
                 desktop.mkdir(parents=True, exist_ok=True)
                 record = {"sessionId": f"local_{uuid.uuid4()}", "cliSessionId": sid, "cwd": cwd, "title": title,
-                          "isArchived": False, "createdAt": (NOW - 3600) * 1000, "lastActivityAt": (NOW + ago) * 1000}
+                          "isArchived": False, "createdAt": (NOW - 3600) * 1000, "lastActivityAt": (NOW + ago) * 1000,
+                          "model": "claude-opus-5-5", "effort": "xhigh" if status == "busy" else "high"}
                 if "branch" in extra:
                     record["branch"] = extra["branch"]
                 if "pr" in extra:

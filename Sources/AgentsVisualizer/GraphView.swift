@@ -263,7 +263,11 @@ private struct SessionNode: View {
             .padding(12)
             .frame(width: 290, alignment: .leading)
             .background {
-                if session.status == .needsInput { BreathingFill(color: Color.orange.opacity(0.22), cornerRadius: 18) }
+                switch session.status {
+                case .needsInput: BreathingFill(color: Color.orange.opacity(0.22), cornerRadius: 18)
+                case .running: BreathingFill(color: Color.green.opacity(0.10), cornerRadius: 18)
+                case .idle, .ended: EmptyView()
+                }
             }
             .glassSurface(RoundedRectangle(cornerRadius: 18, style: .continuous), tint: tint, interactive: true)
             .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
@@ -297,6 +301,7 @@ private struct AgentNode: View {
                             .font(.caption.weight(.bold))
                             .foregroundStyle(agent.status.isActive ? agent.typeColor : .secondary)
                             .lineLimit(1)
+                            .layoutPriority(1)
                         if let model = ModelName.display(agent.model) {
                             Text(verbatim: model).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                         }
@@ -325,6 +330,9 @@ private struct AgentNode: View {
             .padding(.horizontal, 11)
             .padding(.vertical, 8)
             .frame(width: 270, alignment: .leading)
+            .background {
+                if agent.status.isActive { BreathingFill(color: agent.typeColor.opacity(0.16), cornerRadius: 14) }
+            }
             .glassSurface(RoundedRectangle(cornerRadius: 14, style: .continuous),
                           tint: agent.status.isActive ? agent.typeColor.opacity(0.14) : nil, interactive: true)
             .opacity(agent.status.isActive ? 1 : 0.72)
