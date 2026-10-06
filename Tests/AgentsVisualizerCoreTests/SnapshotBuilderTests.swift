@@ -1,0 +1,200 @@
+import Foundation
+import Testing
+@testable import AgentsVisualizerCore
+
+/// End-to-end: a fake home with all three data sources, read the way the app reads them.
+@Suite struct SnapshotBuilderTests {
+    let fixture: Fixture
+    let now = Date()
+    init() throws { fixture = try Fixture() }
+
+    private let desktopBase = "Library/Application Support/Claude/claude-code-sessions/acct/org"
+    private let uuidA = "aaaaaaaa-0000-4000-8000-000000000001"
+    private let uuidB = "bbbbbbbb-0000-4000-8000-000000000002"
+    private let uuidC = "cccccccc-0000-4000-8000-000000000003"
+    private let uuidD = "dddddddd-0000-4000-8000-000000000004"
+
+    private func register(pid: Int32, session: String, cwd: String, status: String, extra: [String: Any] = [:]) throws {
+        var object: [String: Any] = ["pid": pid, "sessionId": session, "cwd": cwd, "status": status,
+                                     "startedAt": (now.timeIntervalSince1970 - 600) * 1000,
+                                     "statusUpdatedAt": now.timeIntervalSince1970 * 1000, "kind": "interactive",
+                                     "entrypoint": "claude-desktop"]
+        object.merge(extra) { $1 }
+        try fixture.writeJSON(".claude/sessions/\(pid).json", object)
+    }
+
+    private func transcript(_ dir: String, _ id: String, _ lines: [[String: Any]]) throws {
+        try fixture.writeJSONL(".claude/projects/\(dir)/\(id).jsonl", lines)
+    }
+
+    private func desktopSession(_ id: String, cli: String, _ fields: [String: Any]) throws {
+        var object: [String: Any] = ["sessionId": id, "cliSessionId": cli]
+        object.merge(fields) { $1 }
+        try fixture.writeJSON("\(desktopBase)/\(id).json", object)
+    }
+
+    private func build(alive: Set<Int32>) -> DashboardSnapshot {
+        SnapshotBuilder(environment: fixture.environment(alive: alive)).build(now: now)
+    }
+
+    @Test func mergesSourcesIntoProjectsWithStatusesAndAgents() throws {
+        let repo = fixture.url("code/app").path
+        let worktree = fixture.url("code/app/.claude/worktrees/brave").path
+        try fixture.makeDirectory("code/app/.git/worktrees/brave")
+        try fixture.write("code/app/.claude/worktrees/brave/.git", "gitdir: \(repo)/.git/worktrees/brave")
+        let other = fixture.url("code/lib").path
+        try fixture.makeDirectory("code/lib/.git")
+
+        // A: desktop session, busy, with one running and one finished agent, inside a worktree.
+        try register(pid: 101, session: uuidA, cwd: worktree, status: "busy", extra: ["hostSessionId": "local_a"])
+        try desktopSession("local_a", cli: uuidA, ["title": "Ship the feature", "branch": "feature/brave", "cwd": worktree])
+        try transcript("-code-app--claude-worktrees-brave", uuidA, [
+            Line.user("Ship it", cwd: worktree),
+            Line.assistantTool("Agent", input: ["description": "Review the diff"]),
+        ])
+        try fixture.writeJSONL(".claude/projects/-code-app--claude-worktrees-brave/\(uuidA)/subagents/agent-r1.jsonl",
+                               [Line.user("review"), Line.assistantTool("Read", input: ["file_path": "/x/Diff.swift"])])
+        try fixture.writeJSON(".claude/projects/-code-app--claude-worktrees-brave/\(uuidA)/subagents/agent-r1.meta.json",
+                              ["agentType": "code-reviewer", "description": "Review the diff"])
+        try fixture.writeJSONL(".claude/projects/-code-app--claude-worktrees-brave/\(uuidA)/subagents/agent-d1.jsonl",
+                               [Line.user("explore"), Line.assistantText("found it")])
+
+        // B: terminal session waiting for a permission prompt in the main checkout.
+        try register(pid: 102, session: uuidB, cwd: repo, status: "waiting",
+                     extra: ["waitingFor": "approve Bash", "entrypoint": "cli", "name": "Refactor", "nameSource": "user"])
+        try transcript("-code-app", uuidB, [Line.user("Refactor the parser", cwd: repo)])
+
+        // C: ended terminal session in another repo, recent.
+        try transcript("-code-lib", uuidC, [
+            Line.user("Bump version", at: now.addingTimeInterval(-3600), cwd: other, branch: "main"),
+            Line.assistantText("Done", at: now.addingTimeInterval(-3500)),
+        ])
+
+        // D: process registered but dead -> ended; its subagents are not listed.
+        try register(pid: 104, session: uuidD, cwd: other, status: "busy")
+        try transcript("-code-lib", uuidD, [Line.user("Long job", cwd: other)])
+        try fixture.writeJSONL(".claude/projects/-code-lib/\(uuidD)/subagents/agent-x.jsonl", [Line.user("x")])
+
+        let snapshot = build(alive: [101, 102])
+        #expect(snapshot.issues.isEmpty)
+        #expect(snapshot.projects.map(\.name) == ["app", "lib"])
+
+        let app = snapshot.projects[0]
+        #expect(app.id == repo)
+        #expect(app.sessions.map(\.id) == [uuidB, uuidA])  // needs-input before running
+
+        let b = app.sessions[0]
+        #expect(b.status == .needsInput)
+        #expect(b.waitingFor == "approve Bash")
+        #expect(b.title == "Refactor")
+        #expect(b.surface == .terminal)
+        #expect(b.desktopSessionId == nil)
+        #expect(b.pid == 102)
+
+        let a = app.sessions[1]
+        #expect(a.status == .running)
+        #expect(a.title == "Ship the feature")
+        #expect(a.desktopSessionId == "local_a")
+        #expect(a.worktreeName == "brave")
+        #expect(a.branch == "feature/brave")
+        #expect(a.activity == "Agent · Review the diff")
+        #expect(a.agents.map(\.id) == ["r1", "d1"])
+        #expect(a.agents.map(\.status) == [.running, .completed])
+        #expect(a.runningAgentCount == 1)
+
+        let lib = snapshot.projects[1]
+        #expect(Set(lib.sessions.map(\.id)) == [uuidC, uuidD])
+        #expect(lib.sessions.allSatisfy { $0.status == .ended && $0.agents.isEmpty && $0.activity == nil })
+        #expect(lib.sessions.first { $0.id == uuidC }?.branch == "main")
+        #expect(lib.sessions.first { $0.id == uuidC }?.title == "Bump version")
+
+        #expect(snapshot.count(.running) == 1)
+        #expect(snapshot.count(.needsInput) == 1)
+        #expect(snapshot.count(.ended) == 2)
+    }
+
+    @Test func hidesArchivedAndEmptySessionsUnlessLive() throws {
+        let repo = fixture.url("code/app").path
+        try fixture.makeDirectory("code/app/.git")
+        try desktopSession("local_arch", cli: uuidA, ["title": "Archived", "isArchived": true, "cwd": repo])
+        try transcript("-code-app", uuidA, [Line.user("old work", cwd: repo)])
+        try transcript("-code-app", uuidB, [["type": "mode", "mode": "normal", "cwd": repo]])  // opened, never used
+        try desktopSession("local_live", cli: uuidC, ["title": "Archived but busy", "isArchived": true, "cwd": repo])
+        try register(pid: 7, session: uuidC, cwd: repo, status: "busy")
+
+        let snapshot = build(alive: [7])
+        #expect(snapshot.allSessions.map(\.title) == ["Archived but busy"])
+    }
+
+    @Test func liveSessionWithoutTranscriptYetStillShows() throws {
+        try register(pid: 9, session: uuidA, cwd: fixture.url("fresh").path, status: "idle", extra: ["hostSessionId": "local_new"])
+        let session = try #require(build(alive: [9]).allSessions.first)
+        #expect(session.status == .idle)
+        #expect(session.desktopSessionId == "local_new")
+        #expect(session.title == "Untitled session")
+    }
+
+    @Test func sshMirrorIsRunningOnlyWhileFreshAndMidTurn() throws {
+        let cwd = fixture.url("remote/app").path
+        try desktopSession("local_ssh1", cli: uuidA, ["title": "Remote busy", "cwd": cwd, "sshConfig": ["sshHost": "box"]])
+        try transcript("ssh-\(uuidA)", uuidA, [Line.user("go", cwd: cwd), Line.assistantTool("Bash", input: ["command": "make"], at: now)])
+        try desktopSession("local_ssh2", cli: uuidB, ["title": "Remote stale", "cwd": cwd, "sshConfig": ["sshHost": "box"]])
+        try transcript("ssh-\(uuidB)", uuidB, [Line.user("go", cwd: cwd),
+                                               Line.assistantTool("Bash", input: [:], at: now.addingTimeInterval(-3600))])
+        try desktopSession("local_ssh3", cli: uuidC, ["title": "Remote done", "cwd": cwd, "sshConfig": ["sshHost": "box"]])
+        try transcript("ssh-\(uuidC)", uuidC, [Line.user("go", cwd: cwd), Line.assistantText("ok", at: now)])
+
+        let byTitle = Dictionary(uniqueKeysWithValues: build(alive: []).allSessions.map { ($0.title, $0) })
+        #expect(byTitle["Remote busy"]?.status == .running)
+        #expect(byTitle["Remote busy"]?.activity == "Bash · make")
+        #expect(byTitle["Remote stale"]?.status == .ended)
+        #expect(byTitle["Remote done"]?.status == .ended)
+        #expect(byTitle.values.allSatisfy { $0.surface == .ssh && $0.sshHost == "box" })
+    }
+
+    @Test func relocatedSessionGroupsUnderItsNewFolder() throws {
+        let original = fixture.url("code/top").path
+        let moved = fixture.url("code/top/backend").path
+        try fixture.makeDirectory("code/top/backend/.git")
+        try transcript("-code-top", uuidA, [
+            Line.user("start", cwd: original),
+            ["type": "relocated", "relocatedCwd": moved],
+            Line.assistantText("ok"),
+        ])
+        let project = try #require(build(alive: []).projects.first)
+        #expect(project.name == "backend")
+        #expect(project.sessions.first?.cwd == moved)
+    }
+
+    @Test func reportsMissingClaudeDirectory() {
+        let snapshot = build(alive: [])
+        #expect(snapshot.issues == [.claudeDirectoryMissing(path: fixture.claudeDirectory.path)])
+        #expect(snapshot.projects.isEmpty)
+    }
+
+    @Test func projectsOrderedByUrgencyThenRecency() throws {
+        for (name, pid, status, ago) in [("idle-old", Int32(1), "idle", 500.0), ("idle-new", 2, "idle", 10), ("busy", 3, "busy", 900)] {
+            try fixture.makeDirectory("code/\(name)/.git")
+            let id = UUID().uuidString.lowercased()
+            try register(pid: pid, session: id, cwd: fixture.url("code/\(name)").path, status: status,
+                         extra: ["statusUpdatedAt": (now.timeIntervalSince1970 - ago) * 1000])
+        }
+        #expect(build(alive: [1, 2, 3]).projects.map(\.name) == ["busy", "idle-new", "idle-old"])
+    }
+
+    @Test func repeatedBuildsAreStableAndPickUpChanges() throws {
+        let repo = fixture.url("code/app").path
+        try fixture.makeDirectory("code/app/.git")
+        try register(pid: 5, session: uuidA, cwd: repo, status: "busy")
+        try transcript("-code-app", uuidA, [Line.user("go", cwd: repo), Line.assistantTool("Bash", input: ["command": "make"])])
+        let builder = SnapshotBuilder(environment: fixture.environment(alive: [5]))
+        let first = builder.build(now: now)
+        #expect(builder.build(now: now) == first)
+
+        try register(pid: 5, session: uuidA, cwd: repo, status: "idle")
+        try fixture.append(".claude/projects/-code-app/\(uuidA).jsonl", Fixture.json(Line.assistantText("Built")) + "\n")
+        let second = try #require(builder.build(now: now).allSessions.first)
+        #expect(second.status == .idle)
+        #expect(second.activity == nil)
+    }
+}
