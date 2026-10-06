@@ -32,6 +32,14 @@ func makeSession(
     func malformedDesktopIdsAreNeverPutInAUrl(desktopId: String) {
         let url = ClaudeDeepLink.url(for: makeSession(desktopId: desktopId))
         #expect(url?.absoluteString == "claude://resume?session=4b8a9872-18af-4471-b2cf-eb5301cdaff3")
+        // Such a session is imported like a CLI one, so the app has to ask first even though it has a desktop id.
+        #expect(!ClaudeDeepLink.continuesInPlace(makeSession(desktopId: desktopId)))
+    }
+
+    @Test func onlySessionsWithAValidDesktopIdContinueInPlace() {
+        #expect(ClaudeDeepLink.continuesInPlace(makeSession(desktopId: "local_93b490c6-f31a-422a-9c53-b9879fcb4918")))
+        #expect(!ClaudeDeepLink.continuesInPlace(makeSession()))
+        #expect(!ClaudeDeepLink.continuesInPlace(makeSession(id: "not-a-uuid")))
     }
 
     @Test func longestValidDesktopIdIsAccepted() {

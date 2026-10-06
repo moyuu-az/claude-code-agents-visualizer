@@ -23,7 +23,7 @@ struct DashboardView: View {
                         }
                         .environment(\.dashboardClock, context.date)
                     }
-                    .animation(.snappy, value: projects)
+                    .animation(.snappy, value: projects.map { [$0.id] + $0.sessions.map(\.layoutKey) })
                 }
             }
             .padding(20)
@@ -69,6 +69,17 @@ struct DashboardView: View {
     }
 }
 
+// Animation keys: what adds, removes, reorders or restyles rows. Activity text and timestamps are left out on
+// purpose: they change on nearly every refresh while sessions work, and an animated refresh re-lays out the
+// whole dashboard on every frame of the animation.
+extension AgentInfo {
+    var layoutKey: String { "\(id) \(status.rawValue)" }
+}
+
+extension SessionInfo {
+    var layoutKey: String { ([id, status.rawValue] + agents.map(\.layoutKey)).joined(separator: " ") }
+}
+
 /// Global counters: the "how is everything going" answer before reading any card.
 struct SummaryStrip: View {
     let snapshot: DashboardSnapshot
@@ -98,6 +109,7 @@ struct SummaryStrip: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(value > 0 ? color : .secondary)
                     .symbolEffect(.bounce, value: value)
+                    .accessibilityHidden(true)
                 Text(value, format: .number)
                     .font(.system(.title2, design: .rounded).weight(.bold))
                     .foregroundStyle(value > 0 ? color : .secondary)
@@ -142,6 +154,7 @@ struct ProjectCard: View {
                 .foregroundStyle(project.topStatus == .ended ? Color.secondary : project.topStatus.color)
                 .frame(width: 30, height: 30)
                 .glassSurface(Circle(), tint: project.topStatus == .ended ? nil : project.topStatus.color.opacity(0.25))
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 1) {
                 Text(verbatim: project.name)
                     .font(.headline)
@@ -165,7 +178,10 @@ struct ProjectCard: View {
                                 .contentTransition(.numericText(value: Double(count)))
                         }
                         .help(Text(status.label))
-                        .accessibilityElement(children: .combine)
+                        // The dot carries the meaning visually; VoiceOver would otherwise read just the number.
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(Text(status.label))
+                        .accessibilityValue(Text(count, format: .number))
                     }
                 }
             }
@@ -236,6 +252,13 @@ struct MasonryLayout: Layout {
                           proposal: ProposedViewSize(width: frame.width, height: frame.height))
         }
     }
+
+    // No explicit guides: the default merges every card's guides, which lays out every card again whenever the
+    // enclosing stack aligns this layout, i.e. on every refresh. No card defines a custom guide.
+    func explicitAlignment(of guide: HorizontalAlignment, in bounds: CGRect, proposal: ProposedViewSize,
+                           subviews: Subviews, cache: inout ()) -> CGFloat? { nil }
+    func explicitAlignment(of guide: VerticalAlignment, in bounds: CGRect, proposal: ProposedViewSize,
+                           subviews: Subviews, cache: inout ()) -> CGFloat? { nil }
 
     private func arrange(width: CGFloat, subviews: Subviews) -> [CGRect] {
         let columns = max(1, Int((width + spacing) / (columnWidth + spacing)))

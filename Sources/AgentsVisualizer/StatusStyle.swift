@@ -88,7 +88,6 @@ extension SessionSurface {
 struct StatusGlyph: View {
     let status: SessionStatus
     var size: CGFloat = 14
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Group {
@@ -96,7 +95,8 @@ struct StatusGlyph: View {
             case .running:
                 RunningRing(color: status.color, size: size)
             case .needsInput:
-                symbol.symbolEffect(.pulse, options: .repeating, isActive: !reduceMotion)
+                // Not `symbolEffect(.pulse, options: .repeating)`: see LayerAnimations.swift.
+                AnimatedSymbol(systemName: status.symbol, color: status.color, pointSize: size, motion: .pulse)
             case .idle, .ended:
                 symbol.symbolEffect(.bounce, value: status)
             }
@@ -122,18 +122,6 @@ struct AgentStatusMark: View {
             .foregroundStyle(status.color)
             .symbolEffect(.bounce, value: status)
             .accessibilityHidden(true)
-    }
-}
-
-extension Image {
-    /// A periodic wiggle on macOS 15+, a pulse before that.
-    @ViewBuilder
-    func attentionSeeking() -> some View {
-        if #available(macOS 15.0, *) {
-            symbolEffect(.wiggle.byLayer, options: .repeat(.periodic(delay: 2)))
-        } else {
-            symbolEffect(.pulse, options: .repeating)
-        }
     }
 }
 
@@ -179,7 +167,7 @@ struct Tag: View {
 
     var body: some View {
         HStack(spacing: 3) {
-            if let symbol { Image(systemName: symbol).imageScale(.small) }
+            if let symbol { Image(systemName: symbol).imageScale(.small).accessibilityHidden(true) }
             text.lineLimit(1)
         }
         .font(.caption2.weight(.medium))

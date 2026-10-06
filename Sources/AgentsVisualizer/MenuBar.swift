@@ -50,6 +50,9 @@ struct MenuBarPanel: View {
                             Button {
                                 dismiss()
                                 model.open(session)
+                                // The import confirmation and errors are alerts of the dashboard window, which may
+                                // be closed or behind other apps; without it they never show (or show much later).
+                                if model.pendingImport != nil || model.errorMessage != nil { showDashboard() }
                             } label: {
                                 HStack(spacing: 8) {
                                     StatusGlyph(status: session.status, size: 11)
@@ -76,8 +79,7 @@ struct MenuBarPanel: View {
             HStack {
                 Button("Open Dashboard") {
                     dismiss()
-                    openWindow(id: DashboardView.windowID)
-                    NSApp.activate(ignoringOtherApps: true)
+                    showDashboard()
                 }
                 Spacer()
                 Button("Quit") { NSApp.terminate(nil) }
@@ -85,6 +87,11 @@ struct MenuBarPanel: View {
             .padding(10)
         }
         .frame(width: 380)
+    }
+
+    private func showDashboard() {
+        openWindow(id: DashboardView.windowID)
+        NSApp.activate(ignoringOtherApps: true)
     }
 }
 

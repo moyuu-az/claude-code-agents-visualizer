@@ -43,7 +43,7 @@ struct SessionRow: View {
                     Label {
                         Text(verbatim: Self.waitingDescription(session.waitingFor))
                     } icon: {
-                        Image(systemName: "hand.raised.fill").attentionSeeking()
+                        AnimatedSymbol(systemName: "hand.raised.fill", color: .orange, pointSize: 10, motion: .wiggle)
                     }
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.orange)
@@ -51,18 +51,17 @@ struct SessionRow: View {
                 }
                 if let activity = session.activity {
                     Label {
-                        Text(verbatim: activity)
+                        // Changes on nearly every refresh; ShimmerText animates the change in Core Animation.
+                        ShimmerText(text: activity, shimmers: false)
+                            .accessibilityRepresentation { Text(verbatim: activity) }
                     } icon: {
                         Image(systemName: "gearshape.2")
                     }
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .id(activity)
                     .transition(.push(from: .bottom).combined(with: .opacity))
                 }
             }
-            .animation(.snappy, value: session.activity)
             if session.runningAgentCount > 0 {
                 AgentOrbit(agents: session.agents)
                     .transition(.scale.combined(with: .opacity))
@@ -169,7 +168,7 @@ struct AgentList: View {
             }
         }
         .padding(.bottom, 6)
-        .animation(.spring(response: 0.5, dampingFraction: 0.72), value: visible)
+        .animation(.spring(response: 0.5, dampingFraction: 0.72), value: visible.map(\.layoutKey))
     }
 }
 
@@ -200,11 +199,10 @@ struct AgentRow: View {
                     }
                     if let activity = agent.activity {
                         ShimmerText(text: activity)
-                            .id(activity)
+                            .accessibilityRepresentation { Text(verbatim: activity) }
                             .transition(.push(from: .bottom).combined(with: .opacity))
                     }
                 }
-                .animation(.snappy, value: agent.activity)
             }
             // Puts the connector's trunk right under the session's status glyph.
             .padding(.leading, 14)
@@ -219,8 +217,9 @@ struct AgentRow: View {
     @ViewBuilder
     private var trailing: some View {
         if agent.status.isActive, let startedAt = agent.startedAt {
-            // Live stopwatch: SwiftUI updates it without re-rendering the row.
-            Text(timerInterval: startedAt...Date.distantFuture, countsDown: false)
+            // Live stopwatch: SwiftUI updates it without re-rendering the row. `startedAt` comes from a transcript,
+            // and a date past `distantFuture` would trap the range and crash on every refresh.
+            Text(timerInterval: min(startedAt, .distantFuture)...Date.distantFuture, countsDown: false)
                 .font(.caption2.monospacedDigit())
                 .foregroundStyle(agent.typeColor)
                 .frame(minWidth: 34, alignment: .trailing)

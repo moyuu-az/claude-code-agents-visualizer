@@ -3,8 +3,10 @@ import SwiftUI
 
 // Continuous animations of an always-on dashboard must not cost CPU. SwiftUI-driven animation (TimelineView or
 // `repeatForever`) re-evaluates the view graph every frame, and here that re-lays out the whole dashboard:
-// one spinner measured ~30-35% CPU. These views hand the animation to Core Animation instead, which runs it in
-// the window server; the app itself does no per-frame work (measured ~0-1%).
+// one spinner measured ~30-35% CPU. The same holds for repeating `symbolEffect`s (~10% CPU each) and for
+// SwiftUI transitions that run on every refresh (~12% CPU on a busy dashboard). These views hand the animation
+// to Core Animation instead, which runs it in the window server; the app itself does no per-frame work
+// (measured ~0-1%).
 
 /// Layer-backed view that (re)builds its layers on size or appearance changes and never takes mouse events,
 /// so it can sit inside SwiftUI buttons and rows.
@@ -14,6 +16,7 @@ final class AnimatedLayerView: NSView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
+        LayerMotion.observeReduceMotion(self, #selector(rebuild))
     }
 
     @available(*, unavailable)
@@ -23,8 +26,10 @@ final class AnimatedLayerView: NSView {
     override func layout() { super.layout(); rebuild() }
     override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); rebuild() }
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); rebuild() }
+    // Bitmap contents (symbol images) are rendered for the screen's scale; redo them on another display.
+    override func viewDidChangeBackingProperties() { super.viewDidChangeBackingProperties(); rebuild() }
 
-    func rebuild() {
+    @objc func rebuild() {
         guard let layer, window != nil, bounds.width > 0, bounds.height > 0 else { return }
         layer.sublayers?.forEach { $0.removeFromSuperlayer() }
         effectiveAppearance.performAsCurrentDrawingAppearance { build(layer, bounds) }
@@ -34,18 +39,38 @@ final class AnimatedLayerView: NSView {
 enum LayerMotion {
     static var reduceMotion: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
 
-    /// Endless animation whose phase follows the global clock, so rebuilding a layer does not make it jump.
+    /// Calls `action` on `target` when Reduce Motion is switched: animations are baked into the layers when
+    /// they are built, so they have to be rebuilt to start or stop.
+    static func observeReduceMotion(_ target: NSObject, _ action: Selector) {
+        NSWorkspace.shared.notificationCenter.addObserver(
+            target, selector: action, name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
+    }
+
     static func forever(_ keyPath: String, from: Any, to: Any, period: CFTimeInterval, autoreverses: Bool = false) -> CABasicAnimation {
         let animation = CABasicAnimation(keyPath: keyPath)
         animation.fromValue = from
         animation.toValue = to
-        animation.duration = period
         animation.autoreverses = autoreverses
+        if autoreverses { animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut) }
+        return looping(animation, period: period)
+    }
+
+    /// Repeats `animation` endlessly with its phase following the global clock, so rebuilding a layer does not
+    /// make it jump.
+    static func looping<Animation: CAAnimation>(_ animation: Animation, period: CFTimeInterval) -> Animation {
+        animation.duration = period
         animation.repeatCount = .infinity
         animation.isRemovedOnCompletion = false
-        animation.timeOffset = CACurrentMediaTime().truncatingRemainder(dividingBy: period * (autoreverses ? 2 : 1))
-        if autoreverses { animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut) }
+        animation.timeOffset = CACurrentMediaTime().truncatingRemainder(dividingBy: period * (animation.autoreverses ? 2 : 1))
         return animation
+    }
+
+    /// A short left-right shake, then a rest: SF Symbols' periodic wiggle.
+    static func wiggle(period: CFTimeInterval = 2.6) -> CAKeyframeAnimation {
+        let animation = CAKeyframeAnimation(keyPath: "transform.rotation.z")
+        animation.values = [0, 0.22, -0.22, 0.14, -0.08, 0, 0]
+        animation.keyTimes = [0, 0.06, 0.14, 0.22, 0.3, 0.38, 1]
+        return looping(animation, period: period)
     }
 
     static func circle(center: CGPoint, radius: CGFloat) -> CGPath {
@@ -218,20 +243,92 @@ struct BreathingFill: NSViewRepresentable {
     }
 }
 
-/// A one-line label with a highlight sweeping across it: the "working on it" shimmer.
+/// SF Symbol that keeps pulsing or wiggling to draw the eye, e.g. to a session waiting for the user.
+struct AnimatedSymbol: NSViewRepresentable {
+    enum Motion { case pulse, wiggle }
+
+    var systemName: String
+    var color: Color
+    var pointSize: CGFloat
+    var motion: Motion
+
+    private var image: NSImage? {
+        NSImage(systemSymbolName: systemName, accessibilityDescription: nil)?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: pointSize, weight: .semibold))
+    }
+
+    func makeNSView(context: Context) -> AnimatedLayerView { AnimatedLayerView() }
+
+    func updateNSView(_ view: AnimatedLayerView, context: Context) {
+        let (image, color, motion) = (image, NSColor(color), motion)
+        view.build = { layer, bounds in
+            guard let image else { return }
+            // The colour shows through the symbol's shape, like SwiftUI's monochrome `foregroundStyle`, so
+            // cut-outs such as the "!" of a filled bubble stay transparent (a palette colour would fill them).
+            let symbol = CALayer()
+            symbol.frame = bounds  // rotates around the centre
+            symbol.backgroundColor = color.cgColor
+            let shape = CALayer()
+            shape.frame = symbol.bounds
+            shape.contentsGravity = .center
+            shape.contentsScale = layer.contentsScale
+            shape.contents = image.layerContents(forContentsScale: layer.contentsScale)
+            symbol.mask = shape
+            if !LayerMotion.reduceMotion {
+                switch motion {
+                case .pulse:
+                    symbol.add(LayerMotion.forever("opacity", from: 1.0, to: 0.35, period: 0.8, autoreverses: true), forKey: "pulse")
+                case .wiggle:
+                    symbol.add(LayerMotion.wiggle(), forKey: "wiggle")
+                }
+            }
+            layer.addSublayer(symbol)
+        }
+        view.rebuild()
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: AnimatedLayerView, context: Context) -> CGSize? {
+        image?.size
+    }
+}
+
+/// A one-line label whose new text pushes in from below, with an optional highlight sweeping across it: the
+/// "working on it" shimmer.
 struct ShimmerText: NSViewRepresentable {
     var text: String
+    var shimmers = true
     var font: NSFont = .systemFont(ofSize: NSFont.smallSystemFontSize - 1)
 
-    final class Label: NSTextField {
+    /// Clips the label: a push transition moves the label's layer as a whole, past its own bounds and mask, so
+    /// without a clipping superview the outgoing text would slide over the row above.
+    final class Ticker: NSView {
+        let label = NSTextField(labelWithString: "")
+        var shimmers = true
+
+        override init(frame: NSRect) {
+            super.init(frame: frame)
+            wantsLayer = true
+            clipsToBounds = true
+            label.wantsLayer = true
+            label.lineBreakMode = .byTruncatingTail
+            label.maximumNumberOfLines = 1
+            label.textColor = .secondaryLabelColor
+            addSubview(label)
+            LayerMotion.observeReduceMotion(self, #selector(installShimmer))
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
         override func layout() {
             super.layout()
+            label.frame = bounds
             installShimmer()
         }
 
-        func installShimmer() {
-            guard let layer, bounds.width > 0 else { return }
+        @objc func installShimmer() {
+            guard shimmers, let layer = label.layer, bounds.width > 0 else { return }
             let mask = CAGradientLayer()
             let band = max(bounds.width, 60)
             // A wide gradient with a bright band in the middle slides across the text.
@@ -247,26 +344,36 @@ struct ShimmerText: NSViewRepresentable {
             }
             layer.mask = mask
         }
+
+        /// Pushes `text` in from below, like a ticker. Core Animation runs it: a SwiftUI transition here re-lays
+        /// out the whole dashboard on every frame, and activity text changes on nearly every refresh.
+        func show(_ text: String) {
+            guard label.stringValue != text else { return }
+            if !LayerMotion.reduceMotion, !label.stringValue.isEmpty, let layer = label.layer {
+                let push = CATransition()
+                push.type = .push
+                push.subtype = .fromBottom  // in this unflipped view; under a flipped superview it comes from the top
+                push.duration = 0.3
+                push.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                layer.add(push, forKey: "ticker")
+            }
+            label.stringValue = text
+        }
     }
 
-    func makeNSView(context: Context) -> Label {
-        let label = Label(labelWithString: text)
-        label.wantsLayer = true
-        label.lineBreakMode = .byTruncatingTail
-        label.maximumNumberOfLines = 1
-        label.textColor = .secondaryLabelColor
-        label.font = font
-        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        return label
+    func makeNSView(context: Context) -> Ticker { Ticker() }
+
+    func updateNSView(_ ticker: Ticker, context: Context) {
+        ticker.shimmers = shimmers
+        ticker.label.font = font
+        ticker.show(text)
     }
 
-    func updateNSView(_ label: Label, context: Context) {
-        if label.stringValue != text { label.stringValue = text }
-        label.font = font
-    }
-
-    func sizeThatFits(_ proposal: ProposedViewSize, nsView: Label, context: Context) -> CGSize? {
-        let natural = nsView.intrinsicContentSize
-        return CGSize(width: min(proposal.width ?? natural.width, natural.width), height: natural.height)
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: Ticker, context: Context) -> CGSize? {
+        // Takes the offered width, not the text's: SwiftUI does not measure this view again when only the text
+        // changes, so a text-sized width would truncate a longer new text. It also keeps text changes layout-free.
+        let natural = nsView.label.intrinsicContentSize
+        let width = proposal.width.flatMap { $0.isFinite ? $0 : nil } ?? natural.width
+        return CGSize(width: width, height: natural.height)
     }
 }
