@@ -41,7 +41,7 @@ struct SessionRow: View {
                 metadata
                 if session.status == .needsInput {
                     Label {
-                        Text(verbatim: session.waitingFor?.capitalizedFirst ?? String(localized: "Waiting for your response"))
+                        Text(verbatim: Self.waitingDescription(session.waitingFor))
                     } icon: {
                         Image(systemName: "hand.raised.fill").attentionSeeking()
                     }
@@ -70,6 +70,18 @@ struct SessionRow: View {
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 12)
+    }
+
+    /// Claude Code reports why it waits as a short English phrase; the common ones get a translated sentence.
+    static func waitingDescription(_ reason: String?) -> String {
+        switch reason {
+        case "permission prompt": String(localized: "Waiting for permission")
+        case "input needed": String(localized: "Waiting for your answer")
+        case "worker request", "sandbox request": String(localized: "Waiting for approval")
+        case "dialog open": String(localized: "A dialog is open")
+        case let reason?: reason.capitalizedFirst
+        case nil: String(localized: "Waiting for your response")
+        }
     }
 
     private var metadata: some View {

@@ -125,6 +125,34 @@ import Testing
         #expect(index.notices(in: url).keys.sorted() == ["a", "b"])
     }
 
+    @Test func readsAcrossChunkBoundariesAndSkipsOversizedLines() throws {
+        // A tiny chunk forces many partial reads; one line is longer than a whole chunk.
+        let index = TaskNoticeIndex(chunkBytes: 256)
+        let huge: [String: Any] = ["type": "attachment", "content": String(repeating: "x", count: 2000)]
+        let url = try fixture.writeJSONL("p.jsonl", [
+            Line.taskNotification(agentId: "a", status: "completed"), huge,
+            Line.taskNotification(agentId: "b", status: "killed"), huge, huge,
+            Line.taskNotification(agentId: "c", status: "failed"),
+        ])
+        let notices = index.notices(in: url)
+        #expect(notices.mapValues(\.status) == ["a": "completed", "b": "killed", "c": "failed"])
+
+        try fixture.append("p.jsonl", Fixture.json(Line.taskNotification(agentId: "d", status: "completed")) + "\n")
+        #expect(index.notices(in: url).count == 4)
+    }
+
+    @Test func unfinishedOversizedTailIsRetriedLater() throws {
+        let index = TaskNoticeIndex(chunkBytes: 256)
+        let url = try fixture.writeJSONL("p.jsonl", [Line.taskNotification(agentId: "a", status: "completed")])
+        #expect(index.notices(in: url).count == 1)
+        // A notification still being written, shorter than a chunk: not consumed until its newline lands.
+        let next = Fixture.json(Line.taskNotification(agentId: "b", status: "killed"))
+        try fixture.append("p.jsonl", String(next.prefix(100)))
+        #expect(index.notices(in: url).count == 1)
+        try fixture.append("p.jsonl", String(next.dropFirst(100)) + "\n")
+        #expect(index.notices(in: url)["b"]?.status == "killed")
+    }
+
     @Test func truncatedFileIsRescanned() throws {
         let index = TaskNoticeIndex()
         let url = try fixture.writeJSONL("p.jsonl", [Line.taskNotification(agentId: "a", status: "completed"),

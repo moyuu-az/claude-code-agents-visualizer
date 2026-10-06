@@ -34,6 +34,10 @@
 "now" = "たった今";
 "Untitled session" = "無題のセッション";
 "Waiting for your response" = "あなたの応答を待っています";
+"Waiting for permission" = "権限の承認を待っています";
+"Waiting for your answer" = "質問への回答を待っています";
+"Waiting for approval" = "承認を待っています";
+"A dialog is open" = "ダイアログが開いています";
 "Git worktree" = "Git worktree";
 "%lld agents running" = "エージェント %lld 件が実行中";
 "Hide finished agents" = "完了したエージェントを隠す";

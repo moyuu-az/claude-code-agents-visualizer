@@ -75,7 +75,12 @@ final class TaskNoticeIndex {
     }
 
     private static let marker = Data("<task-notification>".utf8)
+    private let chunkBytes: Int
     private var states: [URL: State] = [:]
+
+    init(chunkBytes: Int = 8 * 1024 * 1024) {
+        self.chunkBytes = chunkBytes
+    }
 
     func notices(in url: URL) -> [String: TaskNotice] {
         guard let stamp = FileStamp.of(url) else {
@@ -84,13 +89,19 @@ final class TaskNoticeIndex {
         }
         var state = states[url] ?? State()
         if stamp.size < state.offset { state = State() }  // truncated or replaced: start over
-        if stamp.size > state.offset, let data = FileChunk.read(url, from: state.offset) {
+        // Bounded chunks: a first pass over a 100 MB transcript must not load it into memory at once.
+        while stamp.size > state.offset, let data = FileChunk.read(url, from: state.offset, maxBytes: chunkBytes),
+              !data.isEmpty {
             // Only consume complete lines; a half-written last line is picked up next time.
-            if let lastNewline = data.lastIndex(of: UInt8(ascii: "\n")) {
-                let complete = data[data.startIndex...lastNewline]
-                Self.collect(from: complete, into: &state.notices)
-                state.offset += UInt64(complete.count)
+            guard let lastNewline = data.lastIndex(of: UInt8(ascii: "\n")) else {
+                // One line longer than a chunk (huge tool output): skip it whole unless it is the unfinished tail.
+                if data.count < chunkBytes { break }
+                state.offset += UInt64(data.count)
+                continue
             }
+            let complete = data[data.startIndex...lastNewline]
+            Self.collect(from: complete, into: &state.notices)
+            state.offset += UInt64(complete.count)
         }
         states[url] = state
         return state.notices

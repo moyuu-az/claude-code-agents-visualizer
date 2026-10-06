@@ -257,11 +257,11 @@ enum FileChunk {
         return (data, start == 0)
     }
 
-    /// Bytes from `offset` to the end of the file.
-    static func read(_ url: URL, from offset: UInt64) -> Data? {
+    /// Up to `maxBytes` starting at `offset`.
+    static func read(_ url: URL, from offset: UInt64, maxBytes: Int) -> Data? {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
         defer { try? handle.close() }
         guard (try? handle.seek(toOffset: offset)) != nil else { return nil }
-        return try? handle.readToEnd()
+        return try? handle.read(upToCount: maxBytes)
     }
 }
