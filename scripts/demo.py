@@ -123,6 +123,7 @@ def main():
     claude = root / ".claude"
     desktop = root / "desktop" / "account" / "org"
     holders = []
+    app = None
     sessions = {}  # title -> what the scripted changes below need
     agent_files = {}  # description -> (transcript path, model)
     try:
@@ -193,6 +194,9 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
+        if app is not None and app.poll() is None:
+            app.terminate()  # stopped by a signal: take the app down with us
+            app.wait(timeout=10)
         for holder in holders:
             holder.send_signal(signal.SIGTERM)
         shutil.rmtree(root, ignore_errors=True)
