@@ -8,4 +8,4 @@ Please report vulnerabilities privately through
 [GitHub's private vulnerability reporting](https://github.com/moyuu-az/claude-code-agents-visualizer/security/advisories/new)
 rather than a public issue. You can expect an acknowledgement within a week.
 
-Only the latest release is supported.
+Only the latest version on the `main` branch is supported.

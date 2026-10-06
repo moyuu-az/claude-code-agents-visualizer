@@ -39,6 +39,8 @@ What was I doing in the other repo?"* This app answers that at a glance.
 - macOS 14 or later. The Liquid Glass look needs macOS 26; earlier versions use translucent materials.
 - [Claude Code](https://github.com/anthropics/claude-code) (CLI, IDE extension or Claude for Mac). Opening sessions needs
   [Claude for Mac](https://claude.ai/download).
+- Building from source needs the macOS 26 SDK or later: the Command Line Tools (or Xcode) 26 or later
+  (`xcrun --show-sdk-version` prints 26 or higher). The app it builds still runs on macOS 14.
 
 ## Install
 
@@ -56,8 +58,9 @@ cd claude-code-agents-visualizer && scripts/build-app.sh
 open "build/Claude Code Agents Visualizer.app"
 ```
 
-Move the app to `/Applications` to keep it. Builds from CI (the `app` artifact of each workflow run) are
-ad-hoc signed, not notarized: right-click the app and choose **Open** the first time.
+Move the app to `/Applications` to keep it. Builds from CI (the `app` artifact of each workflow run; downloading
+needs a GitHub account) are ad-hoc signed, not notarized, so macOS blocks the first launch: open **System Settings ›
+Privacy & Security** and click **Open Anyway** (on macOS 14, right-click the app and choose **Open** instead).
 
 ## How it works
 
@@ -67,11 +70,12 @@ The app is **read-only** and makes **no network requests**. Every 2 seconds it r
 | --- | --- |
 | `~/.claude/sessions/<pid>.json` | Which sessions have a live process and their status (`busy` / `waiting` / `idle`). PIDs are checked against the process start time, so a recycled PID never shows a dead session as live. |
 | `~/Library/Application Support/Claude/claude-code-sessions/…` | Claude for Mac's session list: titles, desktop ids for deep links, archived flags, pull requests. |
-| `~/.claude/projects/<project>/<session>.jsonl` | Everything else: working directory, branch, first prompt, the tool in flight, subagents (`<session>/subagents/`). Only the first and last 512 KB of a transcript are read, and only changed files are re-read. |
+| `~/.claude/projects/<project>/<session>.jsonl` | Everything else: working directory, branch, first prompt, the tool in flight, subagents (`<session>/subagents/`). Session details come from the first and last 512 KB of a transcript. To track subagents, the transcript of a live session that has any is also scanned once for `<task-notification>` entries (in 8 MB chunks), then only the bytes appended since. Unchanged files are not re-read. |
 
-A subagent counts as finished when its own transcript ends with a final answer or a user interrupt, or when the
-parent session received a `<task-notification>` for it; an unfinished agent of a session whose process is gone
-(or was replaced by a newer process) is shown as interrupted.
+Subagents are listed for live sessions only. One counts as finished when its own transcript ends with a final
+answer or a user interrupt, or when the parent session received a `<task-notification>` for it; an unfinished agent
+last heard from before the session's current process started (the session was resumed after a crash or an app
+restart) is shown as interrupted.
 
 Sessions open through Claude for Mac's URL scheme: `claude://code/continue?session=local_…` for desktop sessions
 and `claude://resume?session=<uuid>` for the rest. Ids are validated before they are put in a URL.
@@ -93,8 +97,12 @@ Continuous animations run in Core Animation (the window server), so the app stay
 | `CLAUDE_CONFIG_DIR` | Same as for Claude Code: where `.claude` lives. |
 | `AGENTS_VISUALIZER_DESKTOP_SESSIONS_DIR` | Read Claude for Mac's session index from another folder (demos, debugging). |
 
-`AgentsVisualizer --dump-json` prints exactly what the dashboard sees, which helps when reporting a bug
-(review it before sharing: it contains your session titles and paths).
+An app opened from Finder or the Dock does not see variables set in your shell profile. Quit the app and start it
+from a terminal where they are set: `open "/Applications/Claude Code Agents Visualizer.app"`.
+
+`"/Applications/Claude Code Agents Visualizer.app/Contents/MacOS/AgentsVisualizer" --dump-json` prints exactly what
+the dashboard sees, which helps when reporting a bug (review it before sharing: it contains your session titles and
+paths).
 
 ## Development
 
@@ -110,10 +118,10 @@ scripts/test.sh
 ```
 
 ```bash
-python3 scripts/demo.py
+scripts/build-app.sh && python3 scripts/demo.py
 ```
 
-`scripts/demo.py` launches the app against made-up sessions, so UI work and screenshots never expose real
+`scripts/demo.py` launches the built app against made-up sessions, so UI work and screenshots never expose real
 projects. See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
 
 ## License

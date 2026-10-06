@@ -40,6 +40,8 @@ Claude Code と Claude for Mac のおかげで、複数のプロジェクトで�
 - macOS 14 以降。Liquid Glass の見た目は macOS 26 以降で、それより前は半透明マテリアルで表示します。
 - [Claude Code](https://github.com/anthropics/claude-code)（CLI、IDE 拡張、Claude for Mac のいずれか）。
   セッションを開くには [Claude for Mac](https://claude.ai/download) が必要です。
+- ソースからのビルドには macOS 26 以降の SDK、つまり Command Line Tools（または Xcode）26 以降が必要です
+  （`xcrun --show-sdk-version` が 26 以上を表示すること）。ビルドしたアプリは macOS 14 でも動きます。
 
 ## インストール
 
@@ -57,8 +59,10 @@ cd claude-code-agents-visualizer && scripts/build-app.sh
 open "build/Claude Code Agents Visualizer.app"
 ```
 
-常用する場合は `/Applications` に移動してください。CI のビルド（各ワークフロー実行の `app` アーティファクト）は
-アドホック署名で公証されていないため、初回は右クリックして「開く」を選んでください。
+常用する場合は `/Applications` に移動してください。CI のビルド（各ワークフロー実行の `app` アーティファクト。
+ダウンロードには GitHub アカウントが必要）はアドホック署名で公証されていないため、初回の起動は macOS に
+ブロックされます。「システム設定 › プライバシーとセキュリティ」で「このまま開く」をクリックしてください
+（macOS 14 では、アプリを右クリックして「開く」を選びます）。
 
 ## 仕組み
 
@@ -68,11 +72,12 @@ open "build/Claude Code Agents Visualizer.app"
 | --- | --- |
 | `~/.claude/sessions/<pid>.json` | 稼働中のプロセスとその状態（`busy` / `waiting` / `idle`）。PID はプロセスの開始時刻と照合するため、再利用された PID で終了済みのセッションが稼働中に見えることはありません。 |
 | `~/Library/Application Support/Claude/claude-code-sessions/…` | Claude for Mac のセッション一覧（タイトル、ディープリンク用の ID、アーカイブ、プルリクエスト）。 |
-| `~/.claude/projects/<project>/<session>.jsonl` | 作業ディレクトリ、ブランチ、最初のプロンプト、実行中のツール、サブエージェント（`<session>/subagents/`）。トランスクリプトは先頭と末尾の 512 KB だけを読み、変更されたファイルだけを読み直します。 |
+| `~/.claude/projects/<project>/<session>.jsonl` | 作業ディレクトリ、ブランチ、最初のプロンプト、実行中のツール、サブエージェント（`<session>/subagents/`）。セッションの情報はトランスクリプトの先頭と末尾の 512 KB から読みます。サブエージェントを追跡するため、サブエージェントのある稼働中セッションのトランスクリプトは `<task-notification>` を探して一度だけ全体を（8 MB 単位で）走査し、以降は追記された部分だけを読みます。変更のないファイルは読み直しません。 |
 
-サブエージェントは、自身のトランスクリプトが最終回答かユーザーの中断で終わっているとき、または親セッションが
-そのエージェントの `<task-notification>` を受け取ったときに終了とみなします。プロセスが終了した（または
-新しいプロセスに置き換わった）セッションの未完了エージェントは「中断」と表示します。
+サブエージェントは稼働中のセッションについてのみ表示します。自身のトランスクリプトが最終回答かユーザーの中断で
+終わっているとき、または親セッションがそのエージェントの `<task-notification>` を受け取ったときに終了とみなします。
+最後の記録がセッションの現在のプロセスの起動より前にある未完了エージェント（クラッシュやアプリの再起動の後に
+セッションが再開された場合）は「中断」と表示します。
 
 セッションは Claude for Mac の URL スキームで開きます。デスクトップのセッションは
 `claude://code/continue?session=local_…`、それ以外は `claude://resume?session=<uuid>` です。
@@ -97,8 +102,12 @@ URL に入れる ID は事前に検証します。
 | `CLAUDE_CONFIG_DIR` | Claude Code と同じく `.claude` の場所を指定します。 |
 | `AGENTS_VISUALIZER_DESKTOP_SESSIONS_DIR` | Claude for Mac のセッション一覧を別のフォルダから読みます（デモやデバッグ用）。 |
 
-`AgentsVisualizer --dump-json` はダッシュボードが見ている内容をそのまま出力します。不具合報告に役立ちますが、
-セッションのタイトルやパスを含むため、共有する前に内容を確認してください。
+Finder や Dock から開いたアプリには、シェルの設定ファイルで定義した環境変数は渡りません。アプリを終了し、
+変数を設定したターミナルから `open "/Applications/Claude Code Agents Visualizer.app"` で起動してください。
+
+`"/Applications/Claude Code Agents Visualizer.app/Contents/MacOS/AgentsVisualizer" --dump-json` はダッシュボードが
+見ている内容をそのまま出力します。不具合報告に役立ちますが、セッションのタイトルやパスを含むため、共有する前に
+内容を確認してください。
 
 ## 開発
 
@@ -114,10 +123,10 @@ scripts/test.sh
 ```
 
 ```bash
-python3 scripts/demo.py
+scripts/build-app.sh && python3 scripts/demo.py
 ```
 
-`scripts/demo.py` は架空のセッションでアプリを起動します。UI の開発やスクリーンショットで実際の
+`scripts/demo.py` はビルド済みのアプリを架空のセッションで起動します。UI の開発やスクリーンショットで実際の
 プロジェクトを写さずに済みます。プルリクエストの前に [CONTRIBUTING.md](CONTRIBUTING.md) をお読みください。
 
 ## ライセンス
