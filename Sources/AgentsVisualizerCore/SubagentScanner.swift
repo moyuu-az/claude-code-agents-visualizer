@@ -100,7 +100,7 @@ final class TaskNoticeIndex {
                 continue
             }
             let complete = data[data.startIndex...lastNewline]
-            Self.collect(from: complete, into: &state.notices)
+            autoreleasepool { Self.collect(from: complete, into: &state.notices) }
             state.offset += UInt64(complete.count)
         }
         states[url] = state

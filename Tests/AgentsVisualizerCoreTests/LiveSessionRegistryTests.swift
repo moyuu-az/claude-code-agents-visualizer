@@ -114,3 +114,24 @@ import Testing
         #expect(!ProcessProbe.isAlive(pid: pid, registeredAt: nil))
     }
 }
+
+@Suite struct ClaudeEnvironmentTests {
+    @Test func defaultsToTheStandardLocations() {
+        let env = ClaudeEnvironment.from(environment: [:])
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        #expect(env.claudeDirectory.standardizedFileURL == home.appending(path: ".claude").standardizedFileURL)
+        #expect(env.desktopSessionsDirectory.path.hasSuffix("Library/Application Support/Claude/claude-code-sessions"))
+    }
+
+    @Test func honoursOverrides() {
+        let env = ClaudeEnvironment.from(environment: [
+            "CLAUDE_CONFIG_DIR": "/tmp/claude-config", "AGENTS_VISUALIZER_DESKTOP_SESSIONS_DIR": "~/desktop-copy",
+        ])
+        #expect(env.claudeDirectory.path == "/tmp/claude-config")
+        #expect(env.desktopSessionsDirectory.path == FileManager.default.homeDirectoryForCurrentUser.appending(path: "desktop-copy").path)
+    }
+
+    @Test func emptyOverrideIsIgnored() {
+        #expect(ClaudeEnvironment.from(environment: ["CLAUDE_CONFIG_DIR": ""]).claudeDirectory.lastPathComponent == ".claude")
+    }
+}

@@ -50,6 +50,12 @@ final class TranscriptReader {
     private var cache: [URL: Entry] = [:]
 
     func summary(of url: URL) -> TranscriptSummary? {
+        // JSONSerialization returns autoreleased objects; without a pool per file, a first pass over hundreds of
+        // transcripts keeps every parsed line alive until the whole refresh ends (measured peak ~320 MB).
+        autoreleasepool { readSummary(of: url) }
+    }
+
+    private func readSummary(of url: URL) -> TranscriptSummary? {
         guard let stamp = FileStamp.of(url) else {
             cache[url] = nil
             return nil

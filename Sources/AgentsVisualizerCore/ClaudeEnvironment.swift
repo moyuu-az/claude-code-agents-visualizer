@@ -24,11 +24,20 @@ public struct ClaudeEnvironment: Sendable {
         self.isProcessAlive = isProcessAlive
     }
 
-    public static var current: ClaudeEnvironment {
+    public static var current: ClaudeEnvironment { from(environment: ProcessInfo.processInfo.environment) }
+
+    /// - `CLAUDE_CONFIG_DIR`: the same override Claude Code honours for `~/.claude`.
+    /// - `AGENTS_VISUALIZER_DESKTOP_SESSIONS_DIR`: points at a copy of Claude Desktop's session index
+    ///   (demo data, debugging a user's report without touching the live files).
+    static func from(environment: [String: String]) -> ClaudeEnvironment {
         let home = FileManager.default.homeDirectoryForCurrentUser
+        func directory(_ key: String) -> URL? {
+            guard let value = environment[key], !value.isEmpty else { return nil }
+            return URL(fileURLWithPath: (value as NSString).expandingTildeInPath, isDirectory: true)
+        }
         return ClaudeEnvironment(
-            claudeDirectory: home.appending(path: ".claude", directoryHint: .isDirectory),
-            desktopSessionsDirectory: home.appending(
+            claudeDirectory: directory("CLAUDE_CONFIG_DIR") ?? home.appending(path: ".claude", directoryHint: .isDirectory),
+            desktopSessionsDirectory: directory("AGENTS_VISUALIZER_DESKTOP_SESSIONS_DIR") ?? home.appending(
                 path: "Library/Application Support/Claude/claude-code-sessions", directoryHint: .isDirectory),
             homeDirectory: home
         )
