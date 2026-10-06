@@ -38,6 +38,11 @@ struct AgentsVisualizerApp: App {
             CommandGroup(after: .toolbar) {
                 Button("Refresh") { model.refreshNow() }
                     .keyboardShortcut("r")
+                Divider()
+                Button("Dashboard") { model.page = .dashboard }
+                    .keyboardShortcut("1")
+                Button("Graph") { model.page = .graph }
+                    .keyboardShortcut("2")
             }
         }
 

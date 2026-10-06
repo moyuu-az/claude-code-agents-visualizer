@@ -8,6 +8,8 @@ Claude for Mac.
 
 ![Dashboard](docs/screenshot.png)
 
+![Agent graph](docs/graph.png)
+
 ## Why
 
 Claude Code and Claude for Mac make it easy to run many sessions across many projects at once. What they do not
@@ -28,6 +30,10 @@ What was I doing in the other repo?"* This app answers that at a glance.
 - **Subagents of live sessions** as a tree under the session: type, description, live stopwatch, what the agent is
   doing right now, and how it ended (completed / failed / stopped / interrupted). Running agents orbit their
   session; dashes flow from the session to each working agent.
+- **Agent graph page** (⌘2): projects → sessions → agents as a living network. Glowing particles travel along the
+  paths where work is happening, each node shows the model (e.g. `Opus 5.5 · xhigh`) and what it is doing, and an
+  activity log lists agents starting and finishing and sessions starting, finishing turns or needing you.
+  ⌘1 returns to the card dashboard.
 - **One click to open** the session in Claude for Mac. Sessions started in a terminal or IDE are imported into
   Claude for Mac after a confirmation (or copy the `claude --resume` command instead).
 - **Menu bar extra** with the number of sessions that need you, and a compact list of live sessions.
@@ -121,8 +127,9 @@ scripts/test.sh
 scripts/build-app.sh && python3 scripts/demo.py
 ```
 
-`scripts/demo.py` launches the built app against made-up sessions, so UI work and screenshots never expose real
-projects. See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
+`scripts/demo.py` launches the built app against made-up sessions and plays a short script of changes (agents
+finishing and spawning, sessions switching state), so UI work and screenshots never expose real projects.
+Pass app arguments after the binary path, e.g. `-page graph -AppleLanguages "(en)"`. See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
 
 ## License
 

@@ -80,6 +80,16 @@ private func data(_ objects: [[String: Any]]) -> Data {
         #expect(tail([Line.user("x")]).model == nil)
     }
 
+    @Test func implausibleTimestampsAreIgnored() {
+        #expect(Timestamp.parse("5000-01-01T00:00:00.000Z") == nil)
+        #expect(Timestamp.parse("1999-12-31T23:59:59Z") == nil)
+        #expect(Timestamp.parse("2026-10-06T10:00:00.123Z") != nil)
+        #expect(Timestamp.parse("not a date") == nil)
+        // A far-future first line must not become the session's start or last activity.
+        let summary = TranscriptReader.parseHead(data([Line.user("x", extra: ["timestamp": "5000-01-01T00:00:00.000Z"])]))
+        #expect(summary.startedAt == nil)
+    }
+
     @Test func detachedHeadIsNotABranch() {
         #expect(tail([Line.user("x", branch: "HEAD")]).gitBranch == nil)
     }

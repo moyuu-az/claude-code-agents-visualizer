@@ -6,6 +6,7 @@ struct GraphPage: View {
     let snapshot: DashboardSnapshot
     let projects: [ProjectGroup]
     let events: [ActivityEvent]
+    let scope: SessionScope
     let isFiltered: Bool
 
     var body: some View {
@@ -17,9 +18,13 @@ struct GraphPage: View {
                         AgentLegend(snapshot: snapshot)
                     }
                     if projects.isEmpty {
-                        EmptyState(scope: .live, isSearching: isFiltered)
+                        EmptyState(scope: scope, isSearching: isFiltered)
                     } else {
-                        GraphCanvas(projects: projects)
+                        // Same shared clock as the dashboard, so relative times tick together.
+                        TimelineView(.periodic(from: .now, by: 30)) { context in
+                            GraphCanvas(projects: projects)
+                                .environment(\.dashboardClock, context.date)
+                        }
                     }
                 }
                 .padding(20)
@@ -252,12 +257,13 @@ private struct SessionNode: View {
                     Label {
                         Text(verbatim: SessionRow.waitingDescription(session.waitingFor))
                     } icon: {
-                        Image(systemName: "hand.raised.fill").attentionSeeking()
+                        AnimatedSymbol(systemName: "hand.raised.fill", color: .orange, pointSize: 10, motion: .wiggle)
                     }
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.orange)
                 } else if let activity = session.activity {
-                    ShimmerText(text: activity).id(activity)
+                    ShimmerText(text: activity, shimmers: false)
+                        .accessibilityRepresentation { Text(verbatim: activity) }
                 }
             }
             .padding(12)
@@ -307,7 +313,7 @@ private struct AgentNode: View {
                         }
                         Spacer(minLength: 4)
                         if agent.status.isActive, let startedAt = agent.startedAt {
-                            Text(timerInterval: startedAt...Date.distantFuture, countsDown: false)
+                            Text(timerInterval: min(startedAt, .distantFuture)...Date.distantFuture, countsDown: false)
                                 .font(.caption2.monospacedDigit())
                                 .foregroundStyle(agent.typeColor)
                                 .frame(minWidth: 32, alignment: .trailing)
@@ -316,6 +322,7 @@ private struct AgentNode: View {
                                 AgentStatusMark(status: agent.status)
                                 Text(agent.status.label).font(.caption2).foregroundStyle(agent.status.color)
                             }
+                            .fixedSize()  // the model name truncates first, never the status
                         }
                     }
                     Text(verbatim: agent.description)
@@ -323,7 +330,8 @@ private struct AgentNode: View {
                         .foregroundStyle(agent.status.isActive ? .primary : .secondary)
                         .lineLimit(1)
                     if let activity = agent.activity {
-                        ShimmerText(text: activity).id(activity)
+                        ShimmerText(text: activity)
+                            .accessibilityRepresentation { Text(verbatim: activity) }
                     }
                 }
             }
@@ -351,7 +359,7 @@ private struct MoreAgentsChip: View {
     var body: some View {
         Button(action: { withAnimation(.snappy) { toggle() } }) {
             Label {
-                if expanded { Text("Hide finished agents") } else { Text("Show \(count) finished agents") }
+                if expanded { Text("Hide finished agents") } else { Text("Show finished agents (\(count))") }
             } icon: {
                 Image(systemName: expanded ? "chevron.up" : "ellipsis")
             }

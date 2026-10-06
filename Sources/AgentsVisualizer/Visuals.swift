@@ -134,7 +134,7 @@ struct AgentOrbit: View {
         OrbitView(satellites: running.map(\.typeColor))
             .frame(width: size, height: size)
             .accessibilityElement()
-            .accessibilityLabel(Text("\(running.count) agents running"))
+            .accessibilityLabel(Text("Agents running: \(running.count)"))
     }
 }
 

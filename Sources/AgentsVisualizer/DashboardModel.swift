@@ -14,6 +14,26 @@ extension SessionScope {
     }
 }
 
+enum DashboardPage: String, CaseIterable, Identifiable {
+    case dashboard, graph
+
+    var id: String { rawValue }
+
+    var label: LocalizedStringKey {
+        switch self {
+        case .dashboard: "Dashboard"
+        case .graph: "Graph"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .dashboard: "square.grid.2x2"
+        case .graph: "point.3.connected.trianglepath.dotted"
+        }
+    }
+}
+
 /// Owns the non-Sendable snapshot builder and runs its file I/O off the main thread.
 actor SessionMonitor {
     private let builder = SnapshotBuilder()
@@ -27,6 +47,12 @@ final class DashboardModel {
     static let refreshInterval: Duration = .seconds(2)
 
     private(set) var snapshot: DashboardSnapshot = .empty
+    /// Newest first; what the graph page's activity log shows.
+    private(set) var activity: [ActivityEvent] = []
+    static let activityLimit = 50
+    var page: DashboardPage {
+        didSet { UserDefaults.standard.set(page.rawValue, forKey: "page") }
+    }
     private(set) var hasLoaded = false
     var searchText = ""
     var scope: SessionScope {
@@ -41,6 +67,7 @@ final class DashboardModel {
 
     init() {
         scope = UserDefaults.standard.string(forKey: "scope").flatMap(SessionScope.init(rawValue:)) ?? .day
+        page = UserDefaults.standard.string(forKey: "page").flatMap(DashboardPage.init(rawValue:)) ?? .dashboard
     }
 
     func start() {
@@ -60,7 +87,13 @@ final class DashboardModel {
     private func refresh() async {
         let next = await monitor.snapshot()
         // Equal snapshots are not re-published, so idle refreshes do not re-render the UI.
-        if next.projects != snapshot.projects || next.issues != snapshot.issues { snapshot = next }
+        guard next.projects != snapshot.projects || next.issues != snapshot.issues else {
+            hasLoaded = true
+            return
+        }
+        let events = ActivityFeed.events(from: snapshot, to: next, at: next.generatedAt)
+        if !events.isEmpty { activity = Array((events.reversed() + activity).prefix(Self.activityLimit)) }
+        snapshot = next
         hasLoaded = true
     }
 

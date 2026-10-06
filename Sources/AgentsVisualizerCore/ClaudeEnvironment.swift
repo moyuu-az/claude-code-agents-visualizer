@@ -87,9 +87,13 @@ enum Timestamp {
     /// ISO-8601 with or without fractional seconds (both appear in transcripts).
     /// ISO8601DateFormatter is documented thread-safe, hence `nonisolated(unsafe)`.
     static func parse(_ string: String?) -> Date? {
-        guard let string else { return nil }
-        return fractional.date(from: string) ?? plain.date(from: string)
+        guard let string, let date = fractional.date(from: string) ?? plain.date(from: string) else { return nil }
+        // A corrupt or hand-edited line can carry any year; such dates would sort first forever and overflow
+        // date ranges in the UI. Claude Code did not exist before 2020.
+        return plausible.contains(date) ? date : nil
     }
+
+    static let plausible = Date(timeIntervalSince1970: 1_577_836_800)...Date(timeIntervalSince1970: 4_102_444_800)  // 2020–2100
 
     /// Epoch milliseconds as used by the session registry and Claude Desktop.
     static func fromMilliseconds(_ value: Double?) -> Date? {

@@ -7,31 +7,33 @@ struct DashboardView: View {
 
     var body: some View {
         @Bindable var model = model
-        let projects = model.visibleProjects
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                SummaryStrip(snapshot: model.snapshot)
-                ForEach(model.snapshot.issues, id: \.self) { IssueBanner(issue: $0) }
-                if !model.hasLoaded {
-                    ProgressView().frame(maxWidth: .infinity, minHeight: 300)
-                } else if projects.isEmpty {
-                    EmptyState(scope: model.scope, isSearching: !model.searchText.isEmpty)
-                } else {
-                    TimelineView(.periodic(from: .now, by: 30)) { context in
-                        MasonryLayout(columnWidth: 400, spacing: 16) {
-                            ForEach(projects) { ProjectCard(project: $0) }
-                        }
-                        .environment(\.dashboardClock, context.date)
-                    }
-                    .animation(.snappy, value: projects.map { [$0.id] + $0.sessions.map(\.layoutKey) })
+        Group {
+            if !model.hasLoaded {
+                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                switch model.page {
+                case .dashboard:
+                    dashboardPage
+                case .graph:
+                    GraphPage(snapshot: model.snapshot, projects: model.visibleProjects, events: model.activity,
+                              scope: model.scope, isFiltered: !model.searchText.isEmpty)
                 }
             }
-            .padding(20)
         }
         .background { AmbientBackground(mood: model.snapshot.mood).ignoresSafeArea() }
         .frame(minWidth: 460, minHeight: 360)
         .navigationTitle("Claude Code Agents")
         .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Picker("Page", selection: $model.page) {
+                    ForEach(DashboardPage.allCases) { page in
+                        Label(page.label, systemImage: page.symbol).tag(page)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelStyle(.iconOnly)
+                .help(Text("Switch between the dashboard and the agent graph (⌘1 / ⌘2)"))
+            }
             ToolbarItem(placement: .principal) {
                 Picker("Show", selection: $model.scope) {
                     ForEach(SessionScope.allCases) { Text($0.label).tag($0) }
@@ -65,6 +67,29 @@ struct DashboardView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(verbatim: model.errorMessage ?? "")
+        }
+    }
+
+    /// The original card view: every project as a glass card, its sessions and their agents inside.
+    private var dashboardPage: some View {
+        let projects = model.visibleProjects
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                SummaryStrip(snapshot: model.snapshot)
+                ForEach(model.snapshot.issues, id: \.self) { IssueBanner(issue: $0) }
+                if projects.isEmpty {
+                    EmptyState(scope: model.scope, isSearching: !model.searchText.isEmpty)
+                } else {
+                    TimelineView(.periodic(from: .now, by: 30)) { context in
+                        MasonryLayout(columnWidth: 400, spacing: 16) {
+                            ForEach(projects) { ProjectCard(project: $0) }
+                        }
+                        .environment(\.dashboardClock, context.date)
+                    }
+                    .animation(.snappy, value: projects.map { [$0.id] + $0.sessions.map(\.layoutKey) })
+                }
+            }
+            .padding(20)
         }
     }
 }

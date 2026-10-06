@@ -154,9 +154,9 @@ struct AgentList: View {
                             if showAll {
                                 Text("Hide finished agents")
                             } else if collapsed.isEmpty {
-                                Text("Show \(hiddenCount) finished agents")
+                                Text("Show finished agents (\(hiddenCount))")
                             } else {
-                                Text("Show \(hiddenCount) more agents")
+                                Text("Show more agents (\(hiddenCount))")
                             }
                         }
                         .font(.caption)

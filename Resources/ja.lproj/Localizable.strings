@@ -39,10 +39,10 @@
 "Waiting for approval" = "承認を待っています";
 "A dialog is open" = "ダイアログが開いています";
 "Git worktree" = "Git worktree";
-"%lld agents running" = "エージェント %lld 件が実行中";
+"Agents running: %lld" = "実行中のエージェント: %lld";
 "Hide finished agents" = "完了したエージェントを隠す";
-"Show %lld finished agents" = "完了したエージェント %lld 件を表示";
-"Show %lld more agents" = "ほかのエージェント %lld 件を表示";
+"Show finished agents (%lld)" = "完了したエージェントを表示（%lld）";
+"Show more agents (%lld)" = "ほかのエージェントを表示（%lld）";
 "No live sessions" = "稼働中のセッションはありません";
 "No sessions" = "セッションはありません";
 "Sessions appear here as soon as Claude Code starts." = "Claude Code を起動すると、ここにセッションが表示されます。";
@@ -72,3 +72,22 @@
 /* Menu bar */
 "Open Dashboard" = "ダッシュボードを開く";
 "Quit" = "終了";
+
+/* Pages */
+"Page" = "ページ";
+"Dashboard" = "ダッシュボード";
+"Graph" = "グラフ";
+"Switch between the dashboard and the agent graph (⌘1 / ⌘2)" = "ダッシュボードとエージェントグラフを切り替えます（⌘1 / ⌘2）";
+
+/* Activity log */
+"Activity" = "アクティビティ";
+"Events appear here as sessions and agents start, finish or need you." = "セッションやエージェントの開始・完了・入力待ちがここに流れます。";
+"%@ started" = "%@ が開始しました";
+"%@ is working" = "%@ が作業を始めました";
+"%@ needs your input" = "%@ があなたの入力を待っています";
+"%@ finished its turn" = "%@ のターンが完了しました";
+"%@ ended" = "%@ が終了しました";
+"%@ started: %@" = "%1$@ が開始: %2$@";
+"%@ completed: %@" = "%1$@ が完了: %2$@";
+"%@ failed: %@" = "%1$@ が失敗: %2$@";
+"%@ stopped: %@" = "%1$@ が停止: %2$@";
