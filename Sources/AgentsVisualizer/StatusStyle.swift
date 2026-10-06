@@ -167,7 +167,7 @@ struct Tag: View {
 
     var body: some View {
         HStack(spacing: 3) {
-            if let symbol { Image(systemName: symbol).imageScale(.small) }
+            if let symbol { Image(systemName: symbol).imageScale(.small).accessibilityHidden(true) }
             text.lineLimit(1)
         }
         .font(.caption2.weight(.medium))

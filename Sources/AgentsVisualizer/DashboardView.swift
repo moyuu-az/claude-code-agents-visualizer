@@ -109,6 +109,7 @@ struct SummaryStrip: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(value > 0 ? color : .secondary)
                     .symbolEffect(.bounce, value: value)
+                    .accessibilityHidden(true)
                 Text(value, format: .number)
                     .font(.system(.title2, design: .rounded).weight(.bold))
                     .foregroundStyle(value > 0 ? color : .secondary)
@@ -153,6 +154,7 @@ struct ProjectCard: View {
                 .foregroundStyle(project.topStatus == .ended ? Color.secondary : project.topStatus.color)
                 .frame(width: 30, height: 30)
                 .glassSurface(Circle(), tint: project.topStatus == .ended ? nil : project.topStatus.color.opacity(0.25))
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 1) {
                 Text(verbatim: project.name)
                     .font(.headline)
@@ -176,7 +178,10 @@ struct ProjectCard: View {
                                 .contentTransition(.numericText(value: Double(count)))
                         }
                         .help(Text(status.label))
-                        .accessibilityElement(children: .combine)
+                        // The dot carries the meaning visually; VoiceOver would otherwise read just the number.
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(Text(status.label))
+                        .accessibilityValue(Text(count, format: .number))
                     }
                 }
             }
