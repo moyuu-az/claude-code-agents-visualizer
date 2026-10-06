@@ -17,15 +17,18 @@ struct DashboardView: View {
                 } else if projects.isEmpty {
                     EmptyState(scope: model.scope, isSearching: !model.searchText.isEmpty)
                 } else {
-                    MasonryLayout(columnWidth: 400, spacing: 14) {
-                        ForEach(projects) { ProjectCard(project: $0) }
+                    TimelineView(.periodic(from: .now, by: 30)) { context in
+                        MasonryLayout(columnWidth: 400, spacing: 16) {
+                            ForEach(projects) { ProjectCard(project: $0) }
+                        }
+                        .environment(\.dashboardClock, context.date)
                     }
                     .animation(.snappy, value: projects)
                 }
             }
             .padding(20)
         }
-        .background(.background)
+        .background { AmbientBackground(mood: model.snapshot.mood).ignoresSafeArea() }
         .frame(minWidth: 460, minHeight: 360)
         .navigationTitle("Claude Code Agents")
         .toolbar {
@@ -72,13 +75,14 @@ struct SummaryStrip: View {
 
     var body: some View {
         let agents = snapshot.allSessions.reduce(0) { $0 + $1.runningAgentCount }
-        HStack(spacing: 10) {
-            ForEach([SessionStatus.needsInput, .running, .idle], id: \.self) { status in
-                Counter(value: snapshot.count(status), label: Text(status.label), color: status.color,
-                        emphasized: status == .needsInput && snapshot.count(status) > 0)
+        GlassGroup(spacing: 12) {
+            HStack(spacing: 10) {
+                ForEach([SessionStatus.needsInput, .running, .idle], id: \.self) { status in
+                    Counter(value: snapshot.count(status), label: Text(status.label), color: status.color, symbol: status.symbol)
+                }
+                Counter(value: agents, label: Text("Agents running"), color: .teal, symbol: "person.2.fill")
+                Spacer(minLength: 0)
             }
-            Counter(value: agents, label: Text("Agents running"), color: .green, emphasized: false)
-            Spacer(minLength: 0)
         }
     }
 
@@ -86,26 +90,26 @@ struct SummaryStrip: View {
         let value: Int
         let label: Text
         let color: Color
-        let emphasized: Bool
+        let symbol: String
 
         var body: some View {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
+            HStack(alignment: .center, spacing: 8) {
+                Image(systemName: symbol)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(value > 0 ? color : .secondary)
+                    .symbolEffect(.bounce, value: value)
                 Text(value, format: .number)
                     .font(.system(.title2, design: .rounded).weight(.bold))
                     .foregroundStyle(value > 0 ? color : .secondary)
-                    .contentTransition(.numericText())
+                    .contentTransition(.numericText(value: Double(value)))
                 label
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 7)
-            .background(color.opacity(emphasized ? 0.16 : 0.07), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-            .overlay {
-                if emphasized {
-                    RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(color.opacity(0.5))
-                }
-            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .glassSurface(Capsule(), tint: value > 0 ? color.opacity(0.22) : nil)
+            .animation(.snappy, value: value)
             .accessibilityElement(children: .combine)
         }
     }
@@ -118,25 +122,26 @@ struct ProjectCard: View {
         let top = project.topStatus
         VStack(alignment: .leading, spacing: 0) {
             header
-            Divider().padding(.horizontal, 12)
             VStack(alignment: .leading, spacing: 0) {
-                ForEach(project.sessions) { SessionRow(session: $0) }
+                ForEach(project.sessions) { session in
+                    SessionRow(session: session)
+                        .transition(.asymmetric(insertion: .push(from: .top).combined(with: .opacity), removal: .opacity))
+                }
             }
-            .padding(.vertical, 4)
-            .padding(.horizontal, 2)
+            .padding(.bottom, 6)
+            .animation(.spring(response: 0.45, dampingFraction: 0.8), value: project.sessions.map(\.id))
         }
-        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(top == .needsInput ? Color.orange.opacity(0.6) : Color.primary.opacity(0.08),
-                              lineWidth: top == .needsInput ? 1.5 : 1)
-        }
+        .glassSurface(RoundedRectangle(cornerRadius: 22, style: .continuous),
+                      tint: top == .needsInput ? Color.orange.opacity(0.14) : nil)
     }
 
     private var header: some View {
-        HStack(spacing: 8) {
-            Image(systemName: project.name == "Scratch" ? "tray" : "folder.fill")
+        HStack(spacing: 10) {
+            Image(systemName: project.name == "Scratch" ? "tray.fill" : "folder.fill")
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(project.topStatus == .ended ? Color.secondary : project.topStatus.color)
+                .frame(width: 30, height: 30)
+                .glassSurface(Circle(), tint: project.topStatus == .ended ? nil : project.topStatus.color.opacity(0.25))
             VStack(alignment: .leading, spacing: 1) {
                 Text(verbatim: project.name)
                     .font(.headline)
@@ -157,6 +162,7 @@ struct ProjectCard: View {
                             Circle().fill(status == .ended ? Color.secondary.opacity(0.5) : status.color)
                                 .frame(width: 7, height: 7)
                             Text(count, format: .number).font(.caption.monospacedDigit())
+                                .contentTransition(.numericText(value: Double(count)))
                         }
                         .help(Text(status.label))
                         .accessibilityElement(children: .combine)
@@ -166,7 +172,8 @@ struct ProjectCard: View {
             .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.top, 12)
+        .padding(.bottom, 6)
     }
 }
 
@@ -185,7 +192,7 @@ struct IssueBanner: View {
         .font(.callout)
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.yellow.opacity(0.12), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .glassSurface(RoundedRectangle(cornerRadius: 14, style: .continuous), tint: Color.yellow.opacity(0.2))
     }
 }
 

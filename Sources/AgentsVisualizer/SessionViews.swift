@@ -17,16 +17,19 @@ struct SessionRow: View {
                 AgentList(session: session)
             }
         }
+        .background {
+            if session.status == .needsInput { NeedsInputGlow() }
+        }
+        .animation(.snappy, value: session.status)
     }
 
     private var content: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            StatusGlyph(symbol: session.status.symbol, color: session.status.color, isActive: session.status == .running)
-                .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
+        HStack(alignment: .center, spacing: 10) {
+            StatusGlyph(status: session.status)
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline) {
                     Text(verbatim: session.title)
-                        .font(.body.weight(.medium))
+                        .font(.body.weight(.semibold))
                         .foregroundStyle(session.status == .ended ? .secondary : .primary)
                         .lineLimit(1)
                         .truncationMode(.tail)
@@ -40,28 +43,41 @@ struct SessionRow: View {
                     Label {
                         Text(verbatim: session.waitingFor?.capitalizedFirst ?? String(localized: "Waiting for your response"))
                     } icon: {
-                        Image(systemName: "hand.raised.fill")
+                        Image(systemName: "hand.raised.fill").attentionSeeking()
                     }
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.orange)
+                    .transition(.blurReplace)
                 }
                 if let activity = session.activity {
-                    Label { Text(verbatim: activity) } icon: { Image(systemName: "gearshape.2") }
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                    Label {
+                        Text(verbatim: activity)
+                    } icon: {
+                        Image(systemName: "gearshape.2")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .id(activity)
+                    .transition(.push(from: .bottom).combined(with: .opacity))
                 }
             }
+            .animation(.snappy, value: session.activity)
+            if session.runningAgentCount > 0 {
+                AgentOrbit(agents: session.agents)
+                    .transition(.scale.combined(with: .opacity))
+            }
         }
-        .padding(.vertical, 7)
+        .padding(.vertical, 8)
         .padding(.horizontal, 12)
     }
 
     private var metadata: some View {
         HStack(spacing: 5) {
             Text(session.status.label)
-                .font(.caption.weight(.semibold))
+                .font(.caption.weight(.bold))
                 .foregroundStyle(session.status.color)
+                .contentTransition(.interpolate)
             Tag(text: session.surface == .ssh && session.sshHost != nil
                     ? Text(verbatim: "SSH · \(session.sshHost!)") : Text(session.surface.label),
                 symbol: session.surface.symbol)
@@ -75,10 +91,14 @@ struct SessionRow: View {
                 Tag(text: Text(verbatim: "#\(pr.number)"), symbol: "arrow.triangle.pull", tint: pr.tint)
                     .help(Text(verbatim: pr.state.map { "\(pr.url.absoluteString) (\($0.lowercased()))" } ?? pr.url.absoluteString))
             }
-            if session.runningAgentCount > 0 {
-                Tag(text: Text("\(session.runningAgentCount) agents running"), symbol: "person.2.fill", tint: .green)
-            }
         }
+    }
+}
+
+/// Soft orange breathing behind a session that is blocked on the user.
+private struct NeedsInputGlow: View {
+    var body: some View {
+        BreathingFill(color: Color.orange.opacity(0.18)).padding(.horizontal, 4)
     }
 }
 
@@ -93,11 +113,13 @@ struct AgentList: View {
         get { showAllState.wrappedValue }
         nonmutating set { showAllState.wrappedValue = newValue }
     }
-    static let collapsedFinishedLimit = 2
+
+    /// Finished agents shown before "Show more": a few while the session works, none once it is idle.
+    private var finishedLimit: Int { session.status == .running || session.status == .needsInput ? 2 : 0 }
 
     private var collapsed: [AgentInfo] {
         session.agents.filter(\.status.isActive)
-            + session.agents.filter { !$0.status.isActive }.prefix(Self.collapsedFinishedLimit)
+            + session.agents.filter { !$0.status.isActive }.prefix(finishedLimit)
     }
 
     var body: some View {
@@ -106,21 +128,36 @@ struct AgentList: View {
         let hiddenCount = session.agents.count - collapsed.count
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(visible.enumerated()), id: \.element.id) { index, agent in
-                AgentRow(session: session, agent: agent, isLast: index == visible.count - 1)
+                AgentRow(session: session, agent: agent, isLast: index == visible.count - 1 && hiddenCount == 0)
+                    .transition(.asymmetric(
+                        insertion: .scale(scale: 0.6, anchor: .leading).combined(with: .opacity).combined(with: .offset(x: -16)),
+                        removal: .opacity.combined(with: .scale(scale: 0.9, anchor: .leading))))
             }
             if hiddenCount > 0 {
-                Button {
-                    withAnimation(.snappy) { showAll.toggle() }
-                } label: {
-                    Text(showAll ? "Show fewer agents" : "Show \(hiddenCount) more agents")
+                HStack(spacing: 0) {
+                    TreeConnector(isLast: true, isFlowing: false).frame(height: 18)
+                    Button {
+                        withAnimation(.snappy) { showAll.toggle() }
+                    } label: {
+                        Group {
+                            if showAll {
+                                Text("Hide finished agents")
+                            } else if collapsed.isEmpty {
+                                Text("Show \(hiddenCount) finished agents")
+                            } else {
+                                Text("Show \(hiddenCount) more agents")
+                            }
+                        }
                         .font(.caption)
+                    }
+                    .buttonStyle(.link)
+                    .padding(.leading, 6)
                 }
-                .buttonStyle(.link)
-                .padding(.leading, 42)
-                .padding(.bottom, 6)
+                .padding(.leading, 18)
             }
         }
-        .padding(.bottom, 4)
+        .padding(.bottom, 6)
+        .animation(.spring(response: 0.5, dampingFraction: 0.72), value: visible)
     }
 }
 
@@ -132,63 +169,57 @@ struct AgentRow: View {
 
     var body: some View {
         Button { model.open(session) } label: {
-            HStack(alignment: .top, spacing: 6) {
-                TreeConnector(isLast: isLast)
-                StatusGlyph(symbol: agent.status.symbol, color: agent.status.color, isActive: agent.status.isActive, size: 10)
-                    .padding(.top, 1)
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 5) {
-                        Tag(text: Text(verbatim: agent.agentType), symbol: agent.isBackground ? "moon.stars" : "person.fill",
-                            tint: agent.status.isActive ? .green : .secondary)
+            HStack(alignment: .center, spacing: 7) {
+                TreeConnector(isLast: isLast, isFlowing: agent.status.isActive, color: agent.typeColor)
+                AgentAvatar(agent: agent)
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 6) {
+                        Text(verbatim: agent.agentType)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(agent.status.isActive ? agent.typeColor : .secondary)
+                            .lineLimit(1)
+                            .layoutPriority(1)
                         Text(verbatim: agent.description)
                             .font(.caption)
                             .foregroundStyle(agent.status.isActive ? .primary : .secondary)
                             .lineLimit(1)
                         Spacer(minLength: 6)
-                        if agent.status.isActive {
-                            RelativeTime(date: agent.startedAt)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        } else {
-                            Text(agent.status.label)
-                                .font(.caption2)
-                                .foregroundStyle(agent.status.color)
-                        }
+                        trailing
                     }
                     if let activity = agent.activity {
-                        Text(verbatim: activity)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                        ShimmerText(text: activity)
+                            .id(activity)
+                            .transition(.push(from: .bottom).combined(with: .opacity))
                     }
                 }
+                .animation(.snappy, value: agent.activity)
             }
-            .padding(.leading, 18)
+            // Puts the connector's trunk right under the session's status glyph.
+            .padding(.leading, 14)
             .padding(.trailing, 12)
-            .padding(.vertical, 2)
+            .frame(minHeight: 26)
         }
         .buttonStyle(HoverRowStyle())
         .help(Text("Open the parent session in Claude"))
         .accessibilityElement(children: .combine)
     }
-}
 
-/// "├" / "└" connector linking an agent to its session.
-private struct TreeConnector: View {
-    let isLast: Bool
-
-    var body: some View {
-        Canvas { context, size in
-            var path = Path()
-            let x = size.width / 2
-            path.move(to: CGPoint(x: x, y: 0))
-            path.addLine(to: CGPoint(x: x, y: isLast ? size.height / 2 : size.height))
-            path.move(to: CGPoint(x: x, y: size.height / 2))
-            path.addLine(to: CGPoint(x: size.width, y: size.height / 2))
-            context.stroke(path, with: .color(.secondary.opacity(0.45)), lineWidth: 1)
+    @ViewBuilder
+    private var trailing: some View {
+        if agent.status.isActive, let startedAt = agent.startedAt {
+            // Live stopwatch: SwiftUI updates it without re-rendering the row.
+            Text(timerInterval: startedAt...Date.distantFuture, countsDown: false)
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(agent.typeColor)
+                .frame(minWidth: 34, alignment: .trailing)
+        } else if !agent.status.isActive {
+            HStack(spacing: 3) {
+                AgentStatusMark(status: agent.status)
+                Text(agent.status.label)
+                    .font(.caption2)
+                    .foregroundStyle(agent.status.color)
+            }
         }
-        .frame(width: 12, height: 18)
-        .accessibilityHidden(true)
     }
 }
 
@@ -230,8 +261,10 @@ struct HoverRowStyle: ButtonStyle {
             configuration.label
                 .contentShape(Rectangle())
                 .background(
-                    Color.primary.opacity(configuration.isPressed ? 0.10 : hoveringState.wrappedValue ? 0.05 : 0),
-                    in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    Color.primary.opacity(configuration.isPressed ? 0.10 : hoveringState.wrappedValue ? 0.06 : 0),
+                    in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .padding(.horizontal, 4)
+                .animation(.easeOut(duration: 0.15), value: hoveringState.wrappedValue)
                 .onHover { hoveringState.wrappedValue = $0 }
         }
     }

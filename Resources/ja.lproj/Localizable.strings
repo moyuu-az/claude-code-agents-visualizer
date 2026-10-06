@@ -1,0 +1,70 @@
+/* Session status */
+"Needs input" = "入力待ち";
+"Running" = "実行中";
+"Done" = "完了";
+"Ended" = "終了";
+
+/* Agent status */
+"Completed" = "完了";
+"Failed" = "失敗";
+"Stopped" = "停止";
+"Interrupted" = "中断";
+
+/* Where a session runs */
+"Desktop" = "Desktop";
+"CLI" = "CLI";
+"VS Code" = "VS Code";
+"SSH" = "SSH";
+"Background" = "バックグラウンド";
+
+/* Scope picker */
+"Show" = "表示";
+"Live" = "稼働中";
+"24 hours" = "24時間";
+"7 days" = "7日間";
+"All" = "すべて";
+"Which sessions to show" = "表示するセッションの範囲";
+
+/* Dashboard */
+"Claude Code Agents" = "Claude Code Agents";
+"Agents running" = "実行中のエージェント";
+"Refresh" = "更新";
+"Refresh now (updates automatically every 2 seconds)" = "今すぐ更新（2 秒ごとに自動で更新されます）";
+"Filter sessions" = "セッションを絞り込む";
+"now" = "たった今";
+"Untitled session" = "無題のセッション";
+"Waiting for your response" = "あなたの応答を待っています";
+"Git worktree" = "Git worktree";
+"%lld agents running" = "エージェント %lld 件が実行中";
+"Hide finished agents" = "完了したエージェントを隠す";
+"Show %lld finished agents" = "完了したエージェント %lld 件を表示";
+"Show %lld more agents" = "ほかのエージェント %lld 件を表示";
+"No live sessions" = "稼働中のセッションはありません";
+"No sessions" = "セッションはありません";
+"Sessions appear here as soon as Claude Code starts." = "Claude Code を起動すると、ここにセッションが表示されます。";
+"Nothing in this time range. Choose a wider range in the toolbar to see older sessions." = "この期間のセッションはありません。ツールバーで範囲を広げると、過去のセッションも表示されます。";
+"Claude Code data was not found at %@. Run Claude Code once, then the dashboard fills in automatically." = "%@ に Claude Code のデータが見つかりません。Claude Code を一度起動すると、自動で表示されます。";
+
+/* Opening sessions */
+"Open in Claude" = "Claude で開く";
+"Opens the session in Claude" = "Claude でセッションを開きます";
+"Open the parent session in Claude" = "親セッションを Claude で開く";
+"Open in Claude?" = "Claude で開きますか？";
+"This session was started outside Claude for Mac. Claude will import its conversation as a new desktop session." = "このセッションは Claude for Mac の外で開始されました。開くと、会話が新しいデスクトップセッションとして Claude に取り込まれます。";
+"Cannot open the session" = "セッションを開けません";
+"This session has no identifier Claude can open." = "このセッションには、Claude で開ける ID がありません。";
+"Claude for Mac is not installed. Install it from claude.ai/download." = "Claude for Mac がインストールされていません。claude.ai/download からインストールしてください。";
+"The file no longer exists." = "ファイルが見つかりません。";
+"Cancel" = "キャンセル";
+"OK" = "OK";
+
+/* Context menu */
+"Copy Resume Command" = "再開コマンドをコピー";
+"Copy Session ID" = "セッション ID をコピー";
+"Open Folder in Finder" = "フォルダを Finder で開く";
+"Reveal Transcript in Finder" = "トランスクリプトを Finder で表示";
+"Open Pull Request #%lld" = "プルリクエスト #%lld を開く";
+
+/* Menu bar */
+"Open Dashboard" = "ダッシュボードを開く";
+"Quit" = "終了";

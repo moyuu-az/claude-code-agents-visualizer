@@ -52,17 +52,14 @@ struct MenuBarPanel: View {
                                 model.open(session)
                             } label: {
                                 HStack(spacing: 8) {
-                                    StatusGlyph(symbol: session.status.symbol, color: session.status.color,
-                                                isActive: session.status == .running, size: 11)
+                                    StatusGlyph(status: session.status, size: 11)
                                     VStack(alignment: .leading, spacing: 1) {
                                         Text(verbatim: session.title).lineLimit(1)
                                         Text(verbatim: project.name).font(.caption).foregroundStyle(.secondary)
                                     }
                                     Spacer(minLength: 6)
                                     if session.runningAgentCount > 0 {
-                                        Label("\(session.runningAgentCount)", systemImage: "person.2.fill")
-                                            .font(.caption)
-                                            .foregroundStyle(.green)
+                                        AgentOrbit(agents: session.agents, size: 26)
                                     }
                                 }
                                 .padding(.horizontal, 12)

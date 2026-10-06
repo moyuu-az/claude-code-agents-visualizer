@@ -175,4 +175,9 @@ public struct DashboardSnapshot: Sendable, Hashable, Codable {
     public var allSessions: [SessionInfo] { projects.flatMap(\.sessions) }
 
     public func count(_ status: SessionStatus) -> Int { allSessions.count { $0.status == status } }
+
+    /// The most urgent status across all sessions; drives the window's ambient colour.
+    public var mood: SessionStatus {
+        allSessions.map(\.status).min { $0.urgency < $1.urgency } ?? .ended
+    }
 }

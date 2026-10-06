@@ -83,68 +83,71 @@ extension SessionSurface {
     }
 }
 
-/// Status glyph. Running items pulse so motion alone tells "something is happening" at a glance.
+/// Session status glyph: a spinning ring while running, a pulsing bubble when it needs you, and a bounce
+/// when it settles into a new state, so changes catch the eye without reading any text.
 struct StatusGlyph: View {
-    let symbol: String
-    let color: Color
-    let isActive: Bool
-    var size: CGFloat = 12
+    let status: SessionStatus
+    var size: CGFloat = 14
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Group {
-            if isActive {
-                PulsingDot(color: color, size: size * 0.75)
-            } else {
-                Image(systemName: symbol)
-                    .font(.system(size: size, weight: .semibold))
-                    .foregroundStyle(color)
+            switch status {
+            case .running:
+                RunningRing(color: status.color, size: size)
+            case .needsInput:
+                symbol.symbolEffect(.pulse, options: .repeating, isActive: !reduceMotion)
+            case .idle, .ended:
+                symbol.symbolEffect(.bounce, value: status)
             }
         }
         .frame(width: size + 4, height: size + 4)
         .accessibilityHidden(true)
     }
+
+    private var symbol: some View {
+        Image(systemName: status.symbol)
+            .font(.system(size: size, weight: .semibold))
+            .foregroundStyle(status.color)
+    }
 }
 
-struct PulsingDot: View {
-    let color: Color
-    let size: CGFloat
-    private let expandedState = State(initialValue: false)  // see AgentList for why not `@State`
-    private var expanded: Bool {
-        get { expandedState.wrappedValue }
-        nonmutating set { expandedState.wrappedValue = newValue }
-    }
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+/// Final-state mark for a finished agent; bounces once when the agent completes.
+struct AgentStatusMark: View {
+    let status: AgentStatus
 
     var body: some View {
-        ZStack {
-            if !reduceMotion {
-                Circle()
-                    .stroke(color.opacity(expanded ? 0 : 0.7), lineWidth: 1.5)
-                    .frame(width: size, height: size)
-                    .scaleEffect(expanded ? 2.1 : 1)
-            }
-            Circle()
-                .fill(color)
-                .frame(width: size, height: size)
-        }
-        .onAppear {
-            guard !reduceMotion else { return }
-            withAnimation(.easeOut(duration: 1.4).repeatForever(autoreverses: false)) { expanded = true }
+        Image(systemName: status.symbol)
+            .font(.system(size: 9, weight: .bold))
+            .foregroundStyle(status.color)
+            .symbolEffect(.bounce, value: status)
+            .accessibilityHidden(true)
+    }
+}
+
+extension Image {
+    /// A periodic wiggle on macOS 15+, a pulse before that.
+    @ViewBuilder
+    func attentionSeeking() -> some View {
+        if #available(macOS 15.0, *) {
+            symbolEffect(.wiggle.byLayer, options: .repeat(.periodic(delay: 2)))
+        } else {
+            symbolEffect(.pulse, options: .repeating)
         }
     }
 }
 
-/// "3 min ago", refreshed on its own so idle snapshots do not have to re-render the whole dashboard.
+/// "3 min ago". The clock comes from the environment so the whole dashboard ticks once per interval,
+/// instead of every row scheduling its own relayout.
 struct RelativeTime: View {
     let date: Date?
+    @Environment(\.dashboardClock) private var now
 
     var body: some View {
         if let date {
-            TimelineView(.periodic(from: .now, by: 30)) { context in
-                Text(Self.format(date, now: context.date))
-                    .monospacedDigit()
-                    .help(date.formatted(date: .abbreviated, time: .standard))
-            }
+            Text(Self.format(date, now: now))
+                .monospacedDigit()
+                .help(date.formatted(date: .abbreviated, time: .standard))
         }
     }
 
@@ -152,7 +155,19 @@ struct RelativeTime: View {
         if now.timeIntervalSince(date) < 45 { return String(localized: "now") }
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .abbreviated
-        return formatter.localizedString(for: date, relativeTo: now)
+        return formatter.localizedString(for: date, relativeTo: max(now, date))
+    }
+}
+
+private struct DashboardClockKey: EnvironmentKey {
+    static let defaultValue = Date()
+}
+
+extension EnvironmentValues {
+    /// Coarse "now" shared by every relative timestamp; see `RelativeTime`.
+    var dashboardClock: Date {
+        get { self[DashboardClockKey.self] }
+        set { self[DashboardClockKey.self] = newValue }
     }
 }
 
