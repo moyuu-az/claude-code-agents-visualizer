@@ -123,7 +123,10 @@ final class TaskNoticeIndex {
 
     /// Extracts (task-id, status) pairs from one or more `<task-notification>` blocks.
     static func parse(_ text: String) -> [(String, String)] {
-        text.components(separatedBy: "<task-notification>").dropFirst().compactMap { block in
+        // `<result>` is the agent's own final output: it can quote other notifications verbatim, which must not be
+        // mistaken for real ones. Real blocks put their task-id/status before it.
+        let text = text.replacing(/<result>.*?<\/result>/.dotMatchesNewlines(), with: "")
+        return text.components(separatedBy: "<task-notification>").dropFirst().compactMap { block in
             guard let id = value(of: "task-id", in: block), let status = value(of: "status", in: block) else { return nil }
             return (id, status)
         }

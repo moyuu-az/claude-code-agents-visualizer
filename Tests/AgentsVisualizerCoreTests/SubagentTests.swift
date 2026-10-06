@@ -74,6 +74,23 @@ import Testing
         #expect(pairs.map(\.1) == ["completed", "killed"])
     }
 
+    @Test func notificationsQuotedInAnAgentResultAreIgnored() {
+        // `<result>` is the agent's own final output and may quote other notifications verbatim.
+        let text = """
+        <task-notification>
+        <task-id>outer</task-id>
+        <status>completed</status>
+        <summary>Agent "Orchestrate" finished</summary>
+        <result>Child said <task-notification><task-id>sibling</task-id><status>killed</status></task-notification>
+        so all good.</result>
+        </task-notification>
+        <task-notification><task-id>next</task-id><status>failed</status><result>boom</result></task-notification>
+        """
+        let pairs = TaskNoticeIndex.parse(text)
+        #expect(pairs.map(\.0) == ["outer", "next"])
+        #expect(pairs.map(\.1) == ["completed", "failed"])
+    }
+
     @Test func readsQueueOperationsAndUserEntries() throws {
         let userString: [String: Any] = ["type": "user", "timestamp": Line.iso(Date()),
                                          "message": ["content": "<task-notification><task-id>u1</task-id><status>failed</status></task-notification>"]]
