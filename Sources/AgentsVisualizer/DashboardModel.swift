@@ -72,10 +72,10 @@ final class DashboardModel {
 
     /// Opens the session in Claude Desktop. Sessions started elsewhere are imported, which deserves a confirmation.
     func open(_ session: SessionInfo) {
-        if session.desktopSessionId == nil {
-            pendingImport = session
-        } else {
+        if ClaudeDeepLink.continuesInPlace(session) {
             launch(session)
+        } else {
+            pendingImport = session
         }
     }
 

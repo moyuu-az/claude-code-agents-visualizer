@@ -14,13 +14,19 @@ public enum ClaudeDeepLink {
     /// - Desktop sessions open in place (`claude://code/continue?session=local_…`).
     /// - Terminal/IDE sessions are imported into Claude Desktop by their CLI id (`claude://resume?session=<uuid>`).
     public static func url(for session: SessionInfo) -> URL? {
-        if let desktopId = session.desktopSessionId, desktopId.wholeMatch(of: desktopIdPattern) != nil {
+        if continuesInPlace(session), let desktopId = session.desktopSessionId {
             return URL(string: "claude://code/continue?session=\(desktopId)")
         }
         if session.id.wholeMatch(of: uuidPattern) != nil {
             return URL(string: "claude://resume?session=\(session.id)")
         }
         return nil
+    }
+
+    /// Whether `url(for:)` opens an existing Claude Desktop session. Otherwise opening imports the conversation as
+    /// a new desktop session, which deserves a confirmation, also when the session has a malformed desktop id.
+    public static func continuesInPlace(_ session: SessionInfo) -> Bool {
+        session.desktopSessionId?.wholeMatch(of: desktopIdPattern) != nil
     }
 
     /// Terminal command that resumes the session with the Claude Code CLI.
