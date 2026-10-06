@@ -217,8 +217,9 @@ struct AgentRow: View {
     @ViewBuilder
     private var trailing: some View {
         if agent.status.isActive, let startedAt = agent.startedAt {
-            // Live stopwatch: SwiftUI updates it without re-rendering the row.
-            Text(timerInterval: startedAt...Date.distantFuture, countsDown: false)
+            // Live stopwatch: SwiftUI updates it without re-rendering the row. `startedAt` comes from a transcript,
+            // and a date past `distantFuture` would trap the range and crash on every refresh.
+            Text(timerInterval: min(startedAt, .distantFuture)...Date.distantFuture, countsDown: false)
                 .font(.caption2.monospacedDigit())
                 .foregroundStyle(agent.typeColor)
                 .frame(minWidth: 34, alignment: .trailing)
