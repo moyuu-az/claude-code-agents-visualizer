@@ -16,6 +16,7 @@ final class AnimatedLayerView: NSView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
+        LayerMotion.observeReduceMotion(self, #selector(rebuild))
     }
 
     @available(*, unavailable)
@@ -28,7 +29,7 @@ final class AnimatedLayerView: NSView {
     // Bitmap contents (symbol images) are rendered for the screen's scale; redo them on another display.
     override func viewDidChangeBackingProperties() { super.viewDidChangeBackingProperties(); rebuild() }
 
-    func rebuild() {
+    @objc func rebuild() {
         guard let layer, window != nil, bounds.width > 0, bounds.height > 0 else { return }
         layer.sublayers?.forEach { $0.removeFromSuperlayer() }
         effectiveAppearance.performAsCurrentDrawingAppearance { build(layer, bounds) }
@@ -37,6 +38,13 @@ final class AnimatedLayerView: NSView {
 
 enum LayerMotion {
     static var reduceMotion: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+
+    /// Calls `action` on `target` when Reduce Motion is switched: animations are baked into the layers when
+    /// they are built, so they have to be rebuilt to start or stop.
+    static func observeReduceMotion(_ target: NSObject, _ action: Selector) {
+        NSWorkspace.shared.notificationCenter.addObserver(
+            target, selector: action, name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
+    }
 
     static func forever(_ keyPath: String, from: Any, to: Any, period: CFTimeInterval, autoreverses: Bool = false) -> CABasicAnimation {
         let animation = CABasicAnimation(keyPath: keyPath)
@@ -306,6 +314,7 @@ struct ShimmerText: NSViewRepresentable {
             label.maximumNumberOfLines = 1
             label.textColor = .secondaryLabelColor
             addSubview(label)
+            LayerMotion.observeReduceMotion(self, #selector(installShimmer))
         }
 
         @available(*, unavailable)
@@ -318,7 +327,7 @@ struct ShimmerText: NSViewRepresentable {
             installShimmer()
         }
 
-        func installShimmer() {
+        @objc func installShimmer() {
             guard shimmers, let layer = label.layer, bounds.width > 0 else { return }
             let mask = CAGradientLayer()
             let band = max(bounds.width, 60)
