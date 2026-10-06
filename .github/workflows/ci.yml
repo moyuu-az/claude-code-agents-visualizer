@@ -18,7 +18,9 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false  # nothing here pushes; later steps (tests, build) need no token
       - name: Toolchain
         run: swift --version
       - name: Test
@@ -27,7 +29,7 @@ jobs:
         run: UNIVERSAL=1 scripts/build-app.sh
       - name: Package
         run: ditto -c -k --keepParent "build/Claude Code Agents Visualizer.app" "build/ClaudeCodeAgentsVisualizer.zip"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: app
           path: build/ClaudeCodeAgentsVisualizer.zip
