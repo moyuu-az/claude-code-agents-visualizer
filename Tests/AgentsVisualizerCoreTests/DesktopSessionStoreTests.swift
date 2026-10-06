@@ -75,8 +75,8 @@ import Testing
     }
 
     @Test func duplicateCliIdKeepsMostRecentActivity() throws {
-        try writeSession("local_old", ["cliSessionId": "cli", "title": "Old", "lastActivityAt": 1000])
-        try writeSession("local_new", ["cliSessionId": "cli", "title": "New", "lastActivityAt": 2000])
+        try writeSession("local_old", ["cliSessionId": "cli", "title": "Old", "lastActivityAt": 1_791_000_000_000])
+        try writeSession("local_new", ["cliSessionId": "cli", "title": "New", "lastActivityAt": 1_791_000_001_000])
         #expect(DesktopSessionStore(root: fixture.desktopDirectory).load()["cli"]?.title == "New")
     }
 

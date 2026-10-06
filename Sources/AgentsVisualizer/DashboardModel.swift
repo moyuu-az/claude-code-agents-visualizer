@@ -87,7 +87,8 @@ final class DashboardModel {
     private func refresh() async {
         let next = await monitor.snapshot()
         // Equal snapshots are not re-published, so idle refreshes do not re-render the UI.
-        guard next.projects != snapshot.projects || next.issues != snapshot.issues else {
+        // The first result is always taken, even if empty: it is the baseline the activity log diffs against.
+        guard !hasLoaded || next.projects != snapshot.projects || next.issues != snapshot.issues else {
             hasLoaded = true
             return
         }

@@ -80,6 +80,17 @@ private func data(_ objects: [[String: Any]]) -> Data {
         #expect(tail([Line.user("x")]).model == nil)
     }
 
+    @Test func implausibleMillisecondTimestampsAreIgnored() {
+        #expect(Timestamp.fromMilliseconds(1_791_282_935_969) == Date(timeIntervalSince1970: 1_791_282_935.969))
+        #expect(Timestamp.fromMilliseconds(nil) == nil)
+        #expect(Timestamp.fromMilliseconds(0) == nil)
+        #expect(Timestamp.fromMilliseconds(-5) == nil)
+        #expect(Timestamp.fromMilliseconds(1_791_282_935) == nil)  // seconds mistaken for milliseconds: 1970
+        #expect(Timestamp.fromMilliseconds(9_000_000_000_000_000) == nil)
+        #expect(Timestamp.fromMilliseconds(.infinity) == nil)
+        #expect(Timestamp.fromMilliseconds(.nan) == nil)
+    }
+
     @Test func implausibleTimestampsAreIgnored() {
         #expect(Timestamp.parse("5000-01-01T00:00:00.000Z") == nil)
         #expect(Timestamp.parse("1999-12-31T23:59:59Z") == nil)

@@ -97,8 +97,9 @@ enum Timestamp {
 
     /// Epoch milliseconds as used by the session registry and Claude Desktop.
     static func fromMilliseconds(_ value: Double?) -> Date? {
-        guard let value, value > 0 else { return nil }
-        return Date(timeIntervalSince1970: value / 1000)
+        guard let value, value.isFinite else { return nil }
+        let date = Date(timeIntervalSince1970: value / 1000)
+        return plausible.contains(date) ? date : nil  // same reasoning as `parse`
     }
 }
 

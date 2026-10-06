@@ -61,8 +61,8 @@ import Testing
     }
 
     @Test func sameSessionInTwoProcessesKeepsMostRecentlyUpdated() throws {
-        try register(pid: 10, ["sessionId": "s", "status": "idle", "statusUpdatedAt": 1000])
-        try register(pid: 11, ["sessionId": "s", "status": "busy", "statusUpdatedAt": 2000])
+        try register(pid: 10, ["sessionId": "s", "status": "idle", "statusUpdatedAt": 1_791_000_000_000])
+        try register(pid: 11, ["sessionId": "s", "status": "busy", "statusUpdatedAt": 1_791_000_001_000])
         let record = try #require(LiveSessionRegistry.load(directory: directory) { _, _ in true }["s"])
         #expect(record.pid == 11)
         #expect(record.sessionStatus == .running)
