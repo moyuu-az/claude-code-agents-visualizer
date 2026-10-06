@@ -69,6 +69,17 @@ private func data(_ objects: [[String: Any]]) -> Data {
         #expect(summary.lastActivityAt == Date(timeIntervalSince1970: 1_790_000_100))
     }
 
+    @Test func newestRealModelIsReported() {
+        var older = Line.assistantText("a", messageId: "m1")
+        var newer = Line.assistantText("b", messageId: "m2")
+        var synthetic = Line.assistantText("API error", messageId: "m3")
+        older["message"] = (older["message"] as! [String: Any]).merging(["model": "claude-sonnet-5-5"]) { $1 }
+        newer["message"] = (newer["message"] as! [String: Any]).merging(["model": "claude-opus-5-5"]) { $1 }
+        synthetic["message"] = (synthetic["message"] as! [String: Any]).merging(["model": "<synthetic>"]) { $1 }
+        #expect(tail([older, newer, synthetic]).model == "claude-opus-5-5")
+        #expect(tail([Line.user("x")]).model == nil)
+    }
+
     @Test func detachedHeadIsNotABranch() {
         #expect(tail([Line.user("x", branch: "HEAD")]).gitBranch == nil)
     }

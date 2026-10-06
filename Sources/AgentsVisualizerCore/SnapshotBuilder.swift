@@ -99,7 +99,9 @@ public final class SnapshotBuilder {
             activity: status == .running ? summary?.activity : nil,
             agents: agents,
             pullRequests: desktop?.pullRequests ?? [],
-            transcriptPath: transcript?.path
+            transcriptPath: transcript?.path,
+            model: summary?.model ?? desktop?.model,
+            effort: desktop?.effort
         )
         return (location, session)
     }

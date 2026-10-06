@@ -60,10 +60,12 @@ public struct AgentInfo: Identifiable, Sendable, Hashable, Codable {
     public let lastActivityAt: Date?
     /// Short description of the tool call in flight, e.g. "Bash · swift test".
     public let activity: String?
+    /// Model id, e.g. `claude-sonnet-5-5`.
+    public let model: String?
 
     public init(
         id: String, agentType: String, description: String, status: AgentStatus, isBackground: Bool,
-        startedAt: Date?, lastActivityAt: Date?, activity: String?
+        startedAt: Date?, lastActivityAt: Date?, activity: String?, model: String? = nil
     ) {
         self.id = id
         self.agentType = agentType
@@ -73,6 +75,7 @@ public struct AgentInfo: Identifiable, Sendable, Hashable, Codable {
         self.startedAt = startedAt
         self.lastActivityAt = lastActivityAt
         self.activity = activity
+        self.model = model
     }
 }
 
@@ -103,12 +106,16 @@ public struct SessionInfo: Identifiable, Sendable, Hashable, Codable {
     public let agents: [AgentInfo]
     public let pullRequests: [PullRequestRef]
     public let transcriptPath: String?
+    /// Model id of the latest reply, e.g. `claude-opus-5-5`.
+    public let model: String?
+    /// Reasoning effort chosen in Claude for Mac (`low` … `xhigh`), when known.
+    public let effort: String?
 
     public init(
         id: String, desktopSessionId: String?, title: String, status: SessionStatus, waitingFor: String?,
         surface: SessionSurface, sshHost: String?, cwd: String, worktreeName: String?, branch: String?,
         pid: Int32?, startedAt: Date?, lastActivityAt: Date?, activity: String?, agents: [AgentInfo],
-        pullRequests: [PullRequestRef], transcriptPath: String?
+        pullRequests: [PullRequestRef], transcriptPath: String?, model: String? = nil, effort: String? = nil
     ) {
         self.id = id
         self.desktopSessionId = desktopSessionId
@@ -127,6 +134,8 @@ public struct SessionInfo: Identifiable, Sendable, Hashable, Codable {
         self.agents = agents
         self.pullRequests = pullRequests
         self.transcriptPath = transcriptPath
+        self.model = model
+        self.effort = effort
     }
 
     public var runningAgentCount: Int { agents.count { $0.status.isActive } }
@@ -179,5 +188,16 @@ public struct DashboardSnapshot: Sendable, Hashable, Codable {
     /// The most urgent status across all sessions; drives the window's ambient colour.
     public var mood: SessionStatus {
         allSessions.map(\.status).min { $0.urgency < $1.urgency } ?? .ended
+    }
+}
+
+public enum ModelName {
+    /// "claude-opus-5-5" → "Opus 5.5", "claude-haiku-4-5-20251001" → "Haiku 4.5"; unknown ids pass through.
+    public static func display(_ id: String?) -> String? {
+        guard let id, !id.isEmpty else { return nil }
+        guard let match = id.wholeMatch(of: /claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?(?:\[.*\])?/) else { return id }
+        let family = match.1.prefix(1).uppercased() + match.1.dropFirst()
+        let version = match.3.map { "\(match.2).\($0)" } ?? String(match.2)
+        return "\(family) \(version)"
     }
 }

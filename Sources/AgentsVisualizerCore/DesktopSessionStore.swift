@@ -13,9 +13,11 @@ struct DesktopSessionRecord: Decodable, Sendable, Equatable {
     let branch: String?
     let sshHost: String?
     let pullRequests: [PullRequestRef]
+    let model: String?
+    let effort: String?
 
     enum CodingKeys: String, CodingKey {
-        case sessionId, cliSessionId, cwd, title, isArchived, createdAt, lastActivityAt, branch, sshConfig, prs
+        case sessionId, cliSessionId, cwd, title, isArchived, createdAt, lastActivityAt, branch, sshConfig, prs, model, effort
     }
 
     private struct SSHConfig: Decodable { let sshHost: String? }
@@ -37,6 +39,8 @@ struct DesktopSessionRecord: Decodable, Sendable, Equatable {
         lastActivityAt = Timestamp.fromMilliseconds(c.lenient(Double.self, .lastActivityAt))
         branch = c.lenient(String.self, .branch)
         sshHost = c.lenient(SSHConfig.self, .sshConfig)?.sshHost
+        model = c.lenient(String.self, .model)
+        effort = c.lenient(String.self, .effort)
         var seen = Set<URL>()
         pullRequests = (c.lenient([PR].self, .prs) ?? []).compactMap { pr in
             // Only http(s) links are ever handed to NSWorkspace.

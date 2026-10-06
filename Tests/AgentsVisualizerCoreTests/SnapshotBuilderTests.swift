@@ -187,6 +187,21 @@ import Testing
         #expect(project.sessions.first?.cwd == moved)
     }
 
+    @Test func modelComesFromTheTranscriptAndEffortFromClaudeForMac() throws {
+        let repo = fixture.url("code/app").path
+        try fixture.makeDirectory("code/app/.git")
+        try desktopSession("local_m", cli: uuidA, ["title": "Models", "cwd": repo, "model": "claude-sonnet-5-5", "effort": "xhigh"])
+        var reply = Line.assistantText("ok")
+        reply["message"] = (reply["message"] as! [String: Any]).merging(["model": "claude-opus-5-5"]) { $1 }
+        try transcript("-code-app", uuidA, [Line.user("go", cwd: repo), reply])
+        try desktopSession("local_n", cli: uuidB, ["title": "No transcript", "cwd": repo, "model": "claude-fable-5-1"])
+
+        let byTitle = Dictionary(uniqueKeysWithValues: build(alive: []).allSessions.map { ($0.title, $0) })
+        #expect(byTitle["Models"]?.model == "claude-opus-5-5")
+        #expect(byTitle["Models"]?.effort == "xhigh")
+        #expect(byTitle["No transcript"]?.model == "claude-fable-5-1")
+    }
+
     @Test func reportsMissingClaudeDirectory() {
         let snapshot = build(alive: [])
         #expect(snapshot.issues == [.claudeDirectoryMissing(path: fixture.claudeDirectory.path)])

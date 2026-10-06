@@ -203,7 +203,8 @@ final class SubagentScanner {
                 isBackground: meta?.requestShape == "background",
                 startedAt: summary.startedAt,
                 lastActivityAt: summary.lastActivityAt,
-                activity: status == .running ? summary.activity : nil
+                activity: status == .running ? summary.activity : nil,
+                model: summary.model
             ))
         }
         // Running agents first (newest first), then the rest by most recent activity.

@@ -28,6 +28,8 @@ struct TranscriptSummary: Equatable, Sendable {
     var turnState: TurnState = .unknown
     /// The tool call in flight when the transcript ends with an unanswered tool_use.
     var activity: String?
+    /// Model id of the newest assistant message, e.g. `claude-opus-5-5`.
+    var model: String?
 
     var title: String? { customTitle ?? aiTitle ?? firstPrompt ?? lastPrompt }
     /// Sessions that were opened and closed without a single prompt are noise on the dashboard.
@@ -125,6 +127,10 @@ final class TranscriptReader {
                 sawRelocation = true
                 summary.relocatedCwd = object["relocatedCwd"] as? String
             case "user", "assistant":
+                if summary.model == nil, object["type"] as? String == "assistant",
+                   let model = (object["message"] as? [String: Any])?["model"] as? String, !model.hasPrefix("<") {
+                    summary.model = model  // `<synthetic>` marks harness-made messages, not a model
+                }
                 if !sawBranch, let branch = object["gitBranch"] as? String, branch != "HEAD" {
                     sawBranch = true
                     summary.gitBranch = branch
