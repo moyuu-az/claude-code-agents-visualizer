@@ -148,6 +148,40 @@ enum LevelDBFile {
         #expect(LevelDB.newest(key, inLog: [UInt8](repeating: 0xff, count: 100)) == nil)
     }
 
+    /// A block tail too short for a header is zero padding; a tail of exactly one header holds an empty FIRST
+    /// fragment. The record after either must still be found.
+    @Test(arguments: 0...8)
+    func logRecordEndingNearABlockBoundary(tail: Int) {
+        // The pad record is 27 bytes of framing (header, batch header, tag, lengths, "pad") plus its value.
+        let file = LevelDBFile.log([(1, [.put(Array("pad".utf8), [UInt8](repeating: 0, count: 32_741 - tail))]), (2, [.put(key, [42])])])
+        if (1...6).contains(tail) { #expect(file[(32768 - tail)..<32768].allSatisfy { $0 == 0 }) }
+        if tail == 7 { #expect(Array(file[32761..<32768]) == [0, 0, 0, 0, 0, 0, 2]) }
+        #expect(LevelDB.newest(key, inLog: file) == .init(sequence: 2, value: [42]))
+        #expect(LevelDB.newest(Array("pad".utf8), inLog: file)?.sequence == 1)
+    }
+
+    /// Claude may be appending while we read, so the file can end anywhere. Whatever the cut, the result is a write
+    /// that really happened (never a half-read one), and it only moves forward as more of the file arrives.
+    @Test(arguments: [false, true])
+    func everyTornTailOfALogYieldsAWrittenEntry(spanningBlocks: Bool) {
+        let big = [UInt8](repeating: 3, count: spanningBlocks ? 70_000 : 300)
+        let file = LevelDBFile.log([
+            (5, [.put(key, [1]), .put(Array("other".utf8), [9])]), (7, [.delete(key)]), (8, [.put(key, big)]),
+            (9, [.put(Array("other".utf8), [1])]), (10, [.put(key, [2])]),
+        ])
+        let written: [LevelDB.Entry?] = [nil, .init(sequence: 5, value: [1]), .init(sequence: 7, value: nil),
+                                         .init(sequence: 8, value: big), .init(sequence: 10, value: [2])]
+        var previous: UInt64 = 0
+        // Every byte for the small file; a stride for the one spanning three blocks (cuts inside FIRST/MIDDLE/LAST).
+        for length in stride(from: 0, through: file.count, by: spanningBlocks ? 61 : 1) {
+            let entry = LevelDB.newest(key, inLog: Array(file.prefix(length)))
+            #expect(written.contains(entry), "cut at \(length)")
+            #expect((entry?.sequence ?? 0) >= previous, "cut at \(length)")
+            previous = entry?.sequence ?? 0
+        }
+        #expect(LevelDB.newest(key, inLog: file) == written.last)
+    }
+
     @Test(arguments: [false, true])
     func tableFindsTheKeyInAnyBlock(compress: Bool) {
         let file = LevelDBFile.table([
@@ -182,6 +216,70 @@ enum LevelDBFile {
         var unknownCompression = good
         unknownCompression[good.count - 48 - 5] = 9  // the index block's type byte, just before its checksum and the footer
         #expect(LevelDB.newest(key, inTable: unknownCompression) == nil)
+    }
+
+    /// A table being written by a compaction has no footer yet; one missing its head has handles that point elsewhere.
+    /// Neither may invent a value.
+    @Test(arguments: [false, true])
+    func everyPartOfATableYieldsNothingOrTheValue(compress: Bool) {
+        let file = LevelDBFile.table([[(Array("a".utf8), 3, [1])], [(key, 9, Array("value".utf8)), (Array("z".utf8), 4, [2])]],
+                                     compress: compress)
+        let expected = LevelDB.Entry(sequence: 9, value: Array("value".utf8))
+        for length in 0..<file.count {
+            #expect(LevelDB.newest(key, inTable: Array(file.prefix(length))) == nil, "first \(length) bytes")
+            let tail = LevelDB.newest(key, inTable: Array(file.suffix(length)))
+            #expect(tail == nil || tail == expected, "last \(length) bytes")
+        }
+        #expect(LevelDB.newest(key, inTable: file) == expected)
+    }
+
+    /// Whatever the bytes, reading ends without trapping (index out of range, negative length, integer overflow): the
+    /// test process would crash otherwise. Seeded so that a failure reproduces.
+    @Test func corruptedFilesNeverTrap() {
+        var random = SplitMix64(seed: 0x5eed)
+        let samples = [
+            LevelDBFile.log([(5, [.put(key, [1]), .delete(Array("other".utf8))]), (7, [.put(key, [UInt8](repeating: 3, count: 300))])]),
+            LevelDBFile.table([[(Array("a".utf8), 3, [1])], [(key, 9, [2]), (Array("z".utf8), 4, nil)]]),
+            LevelDBFile.table([[(Array("a".utf8), 3, [1])], [(key, 9, [2]), (Array("z".utf8), 4, nil)]], compress: true),
+            [18, 0x08, 97, 98, 99, 0x15, 3, 0x0e, 12, 0, 0x07, 1, 0, 0, 0],  // snappy with every tag kind
+        ]
+        for _ in 0..<3000 {
+            var bytes = samples[Int(random.next() % UInt64(samples.count))]
+            for _ in 0...random.next() % 3 { bytes = corrupt(bytes, &random) }
+            _ = LevelDB.newest(key, inLog: bytes)
+            _ = LevelDB.newest(key, inTable: bytes)
+            _ = LevelDB.snappyDecompress(bytes[...])
+            _ = LevelDB.blockEntries(bytes[...])
+            _ = DesktopUnreadStore.decode(bytes)
+        }
+    }
+
+    private func corrupt(_ input: [UInt8], _ random: inout SplitMix64) -> [UInt8] {
+        var bytes = input
+        func index() -> Int { Int(random.next() % UInt64(bytes.count)) }
+        guard !bytes.isEmpty else { return (0..<random.next() % 64).map { _ in UInt8(truncatingIfNeeded: random.next()) } }
+        switch random.next() % 5 {
+        case 0: bytes.removeLast(index())
+        case 1: for _ in 0...random.next() % 8 { bytes[index()] ^= 1 << (random.next() % 8) }
+        // Values that sit on varint, length and type boundaries.
+        case 2: for _ in 0...random.next() % 8 { bytes[index()] = [0x00, 0x01, 0x7f, 0x80, 0xff][Int(random.next() % 5)] }
+        case 3: bytes.insert(contentsOf: (0..<random.next() % 16).map { _ in UInt8(truncatingIfNeeded: random.next()) }, at: index())
+        default: bytes = (0..<random.next() % 256).map { _ in UInt8(truncatingIfNeeded: random.next()) }
+        }
+        return bytes
+    }
+}
+
+/// Deterministic generator for the corruption test.
+private struct SplitMix64: RandomNumberGenerator {
+    var seed: UInt64
+
+    mutating func next() -> UInt64 {
+        seed &+= 0x9e37_79b9_7f4a_7c15
+        var z = seed
+        z = (z ^ z >> 30) &* 0xbf58_476d_1ce4_e5b9
+        z = (z ^ z >> 27) &* 0x94d0_49bb_1331_11eb
+        return z ^ z >> 31
     }
 }
 
@@ -238,6 +336,17 @@ enum LevelDBFile {
             (1, [.put(unreadKey, LevelDBFile.latin1(LevelDBFile.unreadValue(["local_a"])))]),
             (2, [.put(unreadKey, LevelDBFile.latin1(LevelDBFile.unreadValue([])))]),
         ]))
+        #expect(store.load().isEmpty)
+    }
+
+    /// A compaction can drop the key altogether (a deletion merged with the value it hides) and delete the files
+    /// that held it. What was cached for a file that is gone must not bring the old list back.
+    @Test func filesRemovedByACompactionStopCounting() throws {
+        let store = store()
+        try write("000005.ldb", LevelDBFile.table([[(unreadKey, 30, LevelDBFile.latin1(LevelDBFile.unreadValue(["local_a"])))]]))
+        #expect(store.load() == ["local_a"])
+        try FileManager.default.removeItem(at: fixture.url("\(directory)/000005.ldb"))
+        try write("000009.ldb", LevelDBFile.table([[(Array("other".utf8), 40, [1])]]))
         #expect(store.load().isEmpty)
     }
 

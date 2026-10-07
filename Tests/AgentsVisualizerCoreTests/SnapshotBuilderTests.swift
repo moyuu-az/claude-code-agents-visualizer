@@ -221,19 +221,22 @@ import Testing
         let cli = "ffffffff-0000-4000-8000-000000000006"  // not a Claude for Mac session: never unread
         try register(pid: 5, session: cli, cwd: repo, status: "idle", extra: ["entrypoint": "cli"])
         try transcript("-code-app", cli, [Line.user("go", cwd: repo, extra: ["customTitle": "cli"]), Line.assistantText("done")])
+        let hosted = "99999999-0000-4000-8000-000000000007"  // not in the session index yet: only the registry links it
+        try register(pid: 6, session: hosted, cwd: repo, status: "idle", extra: ["hostSessionId": "local_hosted"])
 
         try fixture.makeDirectory("Library/Application Support/Claude/Local Storage/leveldb")
         try Data(LevelDBFile.log([(1, [.put(LevelDBFile.localStorageKey("epitaxy-unread-v1"), LevelDBFile.latin1(
-            LevelDBFile.unreadValue(["local_idle", "local_busy", "local_wait", "local_ended", cli])))])]))
+            LevelDBFile.unreadValue(["local_idle", "local_busy", "local_wait", "local_ended", cli, "local_hosted"])))])]))
             .write(to: fixture.url("Library/Application Support/Claude/Local Storage/leveldb/000003.log"))
 
-        let sessions = Dictionary(uniqueKeysWithValues: build(alive: [1, 2, 3, 4, 5]).allSessions.map { ($0.id, $0) })
+        let sessions = Dictionary(uniqueKeysWithValues: build(alive: [1, 2, 3, 4, 5, 6]).allSessions.map { ($0.id, $0) })
         #expect(sessions[uuidA]?.isUnread == true)
         #expect(sessions[uuidD]?.isUnread == true)
         #expect(sessions[uuidB]?.isUnread == false)
         #expect(sessions[uuidC]?.isUnread == false)
         #expect(sessions[read]?.isUnread == false)
         #expect(sessions[cli]?.isUnread == false)
+        #expect(sessions[hosted]?.isUnread == true)
     }
 
     @Test func reportsMissingClaudeDirectory() {
