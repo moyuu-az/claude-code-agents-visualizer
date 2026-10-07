@@ -239,6 +239,28 @@ import Testing
         #expect(sessions[hosted]?.isUnread == true)
     }
 
+    /// Claude can keep two records for one CLI session (e.g. continued twice); its dot may sit on the older one.
+    @Test func unreadOnAnyDesktopRecordOfTheSessionCounts() throws {
+        let repo = fixture.url("code/app").path
+        try fixture.makeDirectory("code/app/.git")
+        try desktopSession("local_old", cli: uuidA,
+                           ["title": "Old", "cwd": repo, "lastActivityAt": (now.timeIntervalSince1970 - 600) * 1000])
+        try desktopSession("local_new", cli: uuidA,
+                           ["title": "New", "cwd": repo, "lastActivityAt": now.timeIntervalSince1970 * 1000])
+        try fixture.makeDirectory("Library/Application Support/Claude/Local Storage/leveldb")
+        try Data(LevelDBFile.log([(1, [.put(LevelDBFile.localStorageKey("epitaxy-unread-v1"), LevelDBFile.latin1(
+            LevelDBFile.unreadValue(["local_old"])))])]))
+            .write(to: fixture.url("Library/Application Support/Claude/Local Storage/leveldb/000003.log"))
+
+        let sessions = build(alive: []).allSessions
+        #expect(sessions.count == 1)
+        let session = try #require(sessions.first)
+        #expect(session.isUnread)
+        // The most recently active record still supplies the title and the deep link.
+        #expect(session.title == "New")
+        #expect(session.desktopSessionId == "local_new")
+    }
+
     @Test func reportsMissingClaudeDirectory() {
         let snapshot = build(alive: [])
         #expect(snapshot.issues == [.claudeDirectoryMissing(path: fixture.claudeDirectory.path)])
