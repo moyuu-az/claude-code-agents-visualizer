@@ -213,6 +213,22 @@ import Testing
         #expect(quit.allSatisfy { $0.status == .ended })
     }
 
+    /// Claude for Mac bumps `lastActivityAt` when it merely reopens a session (seen in the wild: a conversation idle since
+    /// the day before, bumped by a resume this morning). For local sessions the transcript is the truth.
+    @Test func reopeningALocalSessionInClaudeForMacIsNotActivity() throws {
+        let repo = fixture.url("code/app").path
+        try fixture.makeDirectory("code/app/.git")
+        let talked = Date(timeIntervalSince1970: (now.timeIntervalSince1970 - 2 * 86400).rounded())
+        try desktopSession("local_old", cli: uuidA, [
+            "title": "Old talk", "cwd": repo, "lastActivityAt": (now.timeIntervalSince1970 - 60) * 1000,
+        ])
+        try transcript("-code-app", uuidA, [Line.user("go", at: talked, cwd: repo), Line.assistantText("ok", at: talked)])
+
+        let session = try #require(build(alive: []).allSessions.first)
+        #expect(session.lastActivityAt == talked)
+        #expect(!SessionScope.day.includes(session, now: now))
+    }
+
     @Test func relocatedSessionGroupsUnderItsNewFolder() throws {
         let original = fixture.url("code/top").path
         let moved = fixture.url("code/top/backend").path

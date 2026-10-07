@@ -104,7 +104,10 @@ public final class SnapshotBuilder {
             branch: desktop?.branch ?? summary?.gitBranch.flatMap { $0 == "HEAD" ? nil : $0 },
             pid: live?.pid,
             startedAt: summary?.startedAt ?? desktop?.createdAt ?? live?.startedAt,
-            lastActivityAt: [summary?.lastActivityAt, live?.statusUpdatedAt, desktop?.lastActivityAt].compactMap { $0 }.max(),
+            // Claude for Mac also bumps its timestamp on merely reopening a session, so it only counts where the
+            // transcript is a lagging mirror.
+            lastActivityAt: [summary?.lastActivityAt, live?.statusUpdatedAt, isRemote ? desktop?.lastActivityAt : nil]
+                .compactMap { $0 }.max() ?? desktop?.lastActivityAt,
             activity: status == .running ? activity : nil,
             agents: agents,
             pullRequests: desktop?.pullRequests ?? [],
