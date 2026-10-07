@@ -11,12 +11,18 @@ Each release on GitHub uses its section below as release notes.
 - **Menu bar panel**: wider (440 pt), the counters at the top are four equal tiles with the label under the number
   instead of capsules cut off at the edge, and the session list is as tall as its rows (up to 480 pt) instead of
   stopping after a row and a half.
+- **SSH sessions** show as running while Claude for Mac reports their remote turn in progress, instead of as ended
+  because the local copy of their transcript lags behind. They open only in Claude for Mac: no `claude --resume`
+  command is offered for them.
 
 ### 日本語
 
 - **メニューバーのパネル**: 幅を 440 pt に広げました。上部の件数は、端で切れていたカプセルをやめ、数値の下に
   ラベルを置いた同じ幅のタイル 4 枚にしました。セッション一覧は 1 行半で切れず、行数に合わせた高さ
   （最大 480 pt）で表示します。
+- **SSH セッション**: Claude for Mac がリモートのターンを実行中と記録している間は「実行中」と表示します。これまでは
+  ローカルにミラーされたトランスクリプトの遅れで「終了」になっていました。開くときは Claude for Mac だけで開き、
+  `claude --resume` コマンドは出しません。
 
 ## [0.1.0] - 2026-10-07
 
