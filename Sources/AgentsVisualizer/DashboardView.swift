@@ -120,9 +120,15 @@ struct SummaryStrip: View {
                     Counter(value: snapshot.count(status), label: Text(status.label), color: status.color,
                             symbol: status.symbol, compact: compact)
                 }
-                Counter(value: agents, label: compact ? Text("Agents") : Text("Agents running"), color: .teal,
-                        symbol: "person.2.fill", compact: compact)
-                if !compact { Spacer(minLength: 0) }
+                let agentsCounter = Counter(value: agents, label: compact ? Text("Agents") : Text("Agents running"),
+                                            color: .teal, symbol: "person.2.fill", compact: compact)
+                if compact {
+                    // The short tile label drops "running"; VoiceOver keeps it.
+                    agentsCounter.accessibilityLabel(Text("Agents running: \(agents)"))
+                } else {
+                    agentsCounter
+                    Spacer(minLength: 0)
+                }
             }
         }
     }
