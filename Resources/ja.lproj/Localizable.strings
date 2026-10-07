@@ -28,6 +28,7 @@
 /* Dashboard */
 "Claude Code Agents" = "Claude Code Agents";
 "Agents running" = "実行中のエージェント";
+"Agents" = "エージェント";
 "Unread" = "未読";
 "Unread: opening the session in Claude marks it as read" = "未読: Claude でセッションを開くと既読になります";
 "Refresh" = "更新";
