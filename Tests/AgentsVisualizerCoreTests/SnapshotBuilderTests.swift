@@ -239,6 +239,54 @@ import Testing
         #expect(sessions[hosted]?.isUnread == true)
     }
 
+    /// Claude can keep two records for one CLI session (e.g. continued twice); its dot may sit on the older one.
+    @Test func unreadOnAnyDesktopRecordOfTheSessionCounts() throws {
+        let repo = fixture.url("code/app").path
+        try fixture.makeDirectory("code/app/.git")
+        try desktopSession("local_old", cli: uuidA,
+                           ["title": "Old", "cwd": repo, "lastActivityAt": (now.timeIntervalSince1970 - 600) * 1000])
+        try desktopSession("local_new", cli: uuidA,
+                           ["title": "New", "cwd": repo, "lastActivityAt": now.timeIntervalSince1970 * 1000])
+        try fixture.makeDirectory("Library/Application Support/Claude/Local Storage/leveldb")
+        try Data(LevelDBFile.log([(1, [.put(LevelDBFile.localStorageKey("epitaxy-unread-v1"), LevelDBFile.latin1(
+            LevelDBFile.unreadValue(["local_old"])))])]))
+            .write(to: fixture.url("Library/Application Support/Claude/Local Storage/leveldb/000003.log"))
+
+        let sessions = build(alive: []).allSessions
+        #expect(sessions.count == 1)
+        let session = try #require(sessions.first)
+        #expect(session.isUnread)
+        // The most recently active record still supplies the title; the link opens the record whose dot it clears.
+        #expect(session.title == "New")
+        #expect(session.desktopSessionId == "local_old")
+
+        // While busy, or once read, the link goes back to the most recently active record.
+        try register(pid: 7, session: uuidA, cwd: repo, status: "busy")
+        let busy = try #require(build(alive: [7]).allSessions.first)
+        #expect(!busy.isUnread)
+        #expect(busy.desktopSessionId == "local_new")
+        try Data(LevelDBFile.log([(2, [.put(LevelDBFile.localStorageKey("epitaxy-unread-v1"), LevelDBFile.latin1(
+            LevelDBFile.unreadValue([])))])]))
+            .write(to: fixture.url("Library/Application Support/Claude/Local Storage/leveldb/000004.log"))
+        let read = try #require(build(alive: []).allSessions.first)
+        #expect(!read.isUnread)
+        #expect(read.desktopSessionId == "local_new")
+    }
+
+    /// Among several records for one CLI session, only the most recently active one says whether it was dismissed.
+    @Test func mostRecentDesktopRecordDecidesWhetherArchived() throws {
+        let repo = fixture.url("code/app").path
+        try fixture.makeDirectory("code/app/.git")
+        let earlier = (now.timeIntervalSince1970 - 600) * 1000, later = now.timeIntervalSince1970 * 1000
+        try desktopSession("local_a_old", cli: uuidA, ["title": "Dismissed earlier", "isArchived": true, "cwd": repo,
+                                                       "lastActivityAt": earlier])
+        try desktopSession("local_a_new", cli: uuidA, ["title": "Continued", "cwd": repo, "lastActivityAt": later])
+        try desktopSession("local_b_old", cli: uuidB, ["title": "Older copy", "cwd": repo, "lastActivityAt": earlier])
+        try desktopSession("local_b_new", cli: uuidB, ["title": "Dismissed now", "isArchived": true, "cwd": repo,
+                                                       "lastActivityAt": later])
+        #expect(build(alive: []).allSessions.map(\.title) == ["Continued"])
+    }
+
     @Test func reportsMissingClaudeDirectory() {
         let snapshot = build(alive: [])
         #expect(snapshot.issues == [.claudeDirectoryMissing(path: fixture.claudeDirectory.path)])

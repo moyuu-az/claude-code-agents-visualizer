@@ -61,11 +61,12 @@ final class DesktopSessionStore {
         self.root = root
     }
 
-    /// Records keyed by CLI session id (the transcript id). Sessions without a CLI id are not Claude Code sessions.
-    func load() -> [String: DesktopSessionRecord] {
+    /// Records keyed by CLI session id (the transcript id), most recently active first. Claude can keep several records
+    /// for one CLI session (e.g. continued twice). Sessions without a CLI id are not Claude Code sessions.
+    func load() -> [String: [DesktopSessionRecord]] {
         let fm = FileManager.default
         var seen = Set<URL>()
-        var result: [String: DesktopSessionRecord] = [:]
+        var result: [String: [DesktopSessionRecord]] = [:]
         let files = fm.children(of: root)
             .flatMap { fm.children(of: $0) }
             .flatMap { fm.children(of: $0) }
@@ -81,14 +82,10 @@ final class DesktopSessionStore {
                 cache[url] = (stamp, record)
             }
             guard let record, let cliId = record.cliSessionId else { continue }
-            if let existing = result[cliId],
-               (existing.lastActivityAt ?? .distantPast) >= (record.lastActivityAt ?? .distantPast) {
-                continue
-            }
-            result[cliId] = record
+            result[cliId, default: []].append(record)
         }
         cache = cache.filter { seen.contains($0.key) }
-        return result
+        return result.mapValues { $0.sorted { ($0.lastActivityAt ?? .distantPast) > ($1.lastActivityAt ?? .distantPast) } }
     }
 }
 
