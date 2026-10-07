@@ -111,8 +111,7 @@ private struct GraphCanvas: View {
     /// `agentColumns` leaves room for it.
     private func agentLines(_ session: SessionInfo, shown: [AgentInfo], overflow: Int) -> some View {
         let gap = Self.geometry.agentGap
-        let lines = stride(from: 0, to: shown.count, by: agentColumns)
-            .map { Array(shown[$0..<min($0 + agentColumns, shown.count)]) }
+        let lines = GraphRowLayout.lines(shown, columns: agentColumns)
         return VStack(alignment: .leading, spacing: gap) {
             ForEach(lines.indices, id: \.self) { line in
                 HStack(spacing: gap) {
@@ -163,8 +162,7 @@ private struct GraphCanvas: View {
                     id: "p-\(session.id)", from: projectFrame.trailingCenter, to: sessionFrame.leadingCenter,
                     bend: toSessions, color: session.status == .ended ? .secondary : session.status.color,
                     flow: Self.flow(for: session.status)))
-                let shown = agentsToShow(session).shown
-                for agent in stride(from: 0, to: shown.count, by: agentColumns).map({ shown[$0] }) {
+                for agent in GraphRowLayout.lines(agentsToShow(session).shown, columns: agentColumns).compactMap(\.first) {
                     guard let agentFrame = frames[.agent(session: session.id, agent: agent.id)] else { continue }
                     edges.append(GraphEdge(
                         id: "a-\(session.id)-\(agent.id)", from: sessionFrame.trailingCenter, to: agentFrame.leadingCenter,

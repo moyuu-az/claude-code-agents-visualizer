@@ -107,6 +107,13 @@ public struct GraphRowLayout: Sendable {
         return (running + (expanded ? finished : Array(finished.prefix(room))), overflow)
     }
 
+    /// `shown` in lines of `columns` (at least one per line). The view lays the cards out this way and draws an edge
+    /// to the first of each line, so both must split the same way.
+    public static func lines(_ shown: [AgentInfo], columns: Int) -> [[AgentInfo]] {
+        let columns = max(columns, 1)
+        return stride(from: 0, to: shown.count, by: columns).map { Array(shown[$0..<min($0 + columns, shown.count)]) }
+    }
+
     /// `name` broken after the separator nearest its middle, for a project node too narrow for it on one line. Left
     /// to itself, the Japanese line breaker splits `claude-code-agents-visualizer` inside a word, even with zero-width
     /// spaces after the hyphens. A leading separator (`.dotfiles`, `_scratch`) is not a break: it would sit alone on
