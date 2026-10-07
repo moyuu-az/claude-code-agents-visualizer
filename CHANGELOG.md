@@ -14,7 +14,7 @@ Each release on GitHub uses its section below as release notes.
 
 ### Fixed
 
-- **Menu bar panel**: wider (440 pt), the counters at the top are four equal tiles with the label under the number
+- **Menu bar panel**: wider (440 pt), the counters at the top are equal-width tiles with the label under the number
   instead of capsules cut off at the edge, and the session list is as tall as its rows (up to 480 pt) instead of
   stopping after a row and a half.
 
@@ -24,7 +24,7 @@ Each release on GitHub uses its section below as release notes.
   ドットを付け、上部に「未読」の件数を表示します。Claude for Mac で開くまで、表示範囲に関係なく一覧と
   メニューバーに表示します。未読の一覧は Claude for Mac の Local Storage から読みます。
 - **メニューバーのパネル**: 幅を 440 pt に広げました。上部の件数は、端で切れていたカプセルをやめ、数値の下に
-  ラベルを置いた同じ幅のタイル 4 枚にしました。セッション一覧は 1 行半で切れず、行数に合わせた高さ
+  ラベルを置いた同じ幅のタイルにしました。セッション一覧は 1 行半で切れず、行数に合わせた高さ
   （最大 480 pt）で表示します。
 
 ## [0.1.0] - 2026-10-07
