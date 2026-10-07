@@ -43,6 +43,11 @@ public struct ClaudeEnvironment: Sendable {
         )
     }
 
+    /// Claude for Mac's web storage (a Chromium LevelDB) with the sidebar's unread list. Derived from the session
+    /// index so that pointing `desktopSessionsDirectory` elsewhere (tests, demos) never reads the real one.
+    var desktopLocalStorageDirectory: URL {
+        desktopSessionsDirectory.deletingLastPathComponent().appending(path: "Local Storage/leveldb", directoryHint: .isDirectory)
+    }
     var sessionRegistryDirectory: URL { claudeDirectory.appending(path: "sessions", directoryHint: .isDirectory) }
     var projectsDirectory: URL { claudeDirectory.appending(path: "projects", directoryHint: .isDirectory) }
 }

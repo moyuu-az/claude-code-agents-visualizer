@@ -14,6 +14,7 @@ import os
 import pathlib
 import shutil
 import signal
+import struct
 import subprocess
 import sys
 import tempfile
@@ -58,10 +59,27 @@ SESSIONS = [
         ("code-reviewer", "Concurrency review", "running", 2),
     ], {"worktree": "brave-otter", "pr": (42, "OPEN")}),
     ("payments-api", "Postgres 17 migration plan", "idle", "desktop", 48, None, [], {"branch": "chore/pg17"}),
-    ("mobile-app", "Release notes for 3.2", "idle", "desktop", 12, None, [], {"pr": (311, "MERGED")}),
+    ("mobile-app", "Release notes for 3.2", "idle", "desktop", 12, None, [], {"pr": (311, "MERGED"), "unread": True}),
     ("mobile-app", "Crash in onboarding flow", "ended", "cli", 190, None, [], {}),
     ("infra", "Terraform drift check", "ended", "cli", 320, None, [], {}),
 ]
+
+
+def write_unread(directory, desktop_ids):
+    """Claude for Mac's sidebar unread list, as one record in the Local Storage LevelDB log the app reads."""
+    def varint(n):
+        out = bytearray()
+        while n >= 0x80:
+            out.append(n & 0x7F | 0x80)
+            n >>= 7
+        return bytes(out + bytes([n]))
+
+    key = b"_https://claude.ai\x00\x01epitaxy-unread-v1"
+    value = b"\x01" + json.dumps({"state": {"unreadIds": desktop_ids, "explicitUnreadIds": []}, "version": 0}).encode()
+    batch = struct.pack("<QI", 1, 1) + b"\x01" + varint(len(key)) + key + varint(len(value)) + value
+    directory.mkdir(parents=True, exist_ok=True)
+    # One FULL record (type 1); the checksum is not verified by the app.
+    (directory / "000003.log").write_bytes(struct.pack("<IHB", 0, len(batch), 1) + batch)
 
 
 def append(path, line):
@@ -126,6 +144,7 @@ def main():
     app = None
     sessions = {}  # title -> what the scripted changes below need
     agent_files = {}  # description -> (transcript path, model)
+    unread = []  # desktop ids shown as unread
     try:
         for project, title, status, surface, minutes, activity, agents, extra in SESSIONS:
             sid = str(uuid.uuid4())
@@ -167,6 +186,8 @@ def main():
                     record["prs"] = [{"prNumber": number, "url": f"https://github.com/acme/{project}/pull/{number}",
                                       "state": state}]
                 (desktop / f"{record['sessionId']}.json").write_text(json.dumps(record))
+                if extra.get("unread"):
+                    unread.append(record["sessionId"])
 
             if status != "ended":
                 holder = subprocess.Popen(["sleep", "86400"], start_new_session=True)
@@ -181,6 +202,9 @@ def main():
                 (registry / f"{holder.pid}.json").write_text(json.dumps(entry))
                 sessions[title] = {"registry": registry / f"{holder.pid}.json", "entry": entry,
                                    "transcript": pdir / f"{sid}.jsonl", "subagents": pdir / sid / "subagents", "cwd": cwd}
+
+        # Next to the session index, where the app looks for Claude for Mac's Local Storage.
+        write_unread(root / "Local Storage" / "leveldb", unread)
 
         repo = pathlib.Path(__file__).resolve().parent.parent
         binary = sys.argv[1] if len(sys.argv) > 1 else str(

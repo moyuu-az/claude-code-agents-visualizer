@@ -3,7 +3,7 @@ import Foundation
 /// Merges the three data sources into one dashboard snapshot:
 ///
 /// 1. `~/.claude/sessions/*.json` - which sessions have a live process and their status (authoritative).
-/// 2. Claude Desktop's session index - titles, desktop ids (for deep links), archive flags, PRs.
+/// 2. Claude Desktop's session index - titles, desktop ids (for deep links), archive flags, PRs - and its unread list.
 /// 3. `~/.claude/projects/**/<id>.jsonl` transcripts - everything else, plus subagents.
 ///
 /// Not thread-safe: it owns incremental caches. Drive it from a single actor/queue.
@@ -14,6 +14,7 @@ public final class SnapshotBuilder {
 
     private let environment: ClaudeEnvironment
     private let desktopStore: DesktopSessionStore
+    private let unreadStore: DesktopUnreadStore
     private let transcripts = TranscriptReader()
     private let subagents: SubagentScanner
     private let projects: ProjectResolver
@@ -21,6 +22,7 @@ public final class SnapshotBuilder {
     public init(environment: ClaudeEnvironment = .current) {
         self.environment = environment
         desktopStore = DesktopSessionStore(root: environment.desktopSessionsDirectory)
+        unreadStore = DesktopUnreadStore(directory: environment.desktopLocalStorageDirectory)
         subagents = SubagentScanner(transcripts: transcripts)
         projects = ProjectResolver(homeDirectory: environment.homeDirectory)
     }
@@ -34,6 +36,7 @@ public final class SnapshotBuilder {
         let live = LiveSessionRegistry.load(
             directory: environment.sessionRegistryDirectory, isAlive: environment.isProcessAlive)
         let desktop = desktopStore.load()
+        let unread = unreadStore.load()
         let transcriptFiles = discoverTranscripts()
 
         var ids = Set(live.keys)
@@ -44,7 +47,7 @@ public final class SnapshotBuilder {
         var grouped: [String: (location: ProjectLocation, sessions: [SessionInfo])] = [:]
         for id in ids {
             guard let (location, session) = makeSession(
-                id: id, live: live[id], desktop: desktop[id], transcript: transcriptFiles[id], now: now)
+                id: id, live: live[id], desktop: desktop[id], transcript: transcriptFiles[id], unread: unread, now: now)
             else { continue }
             grouped[location.root, default: (location, [])].sessions.append(session)
         }
@@ -58,7 +61,8 @@ public final class SnapshotBuilder {
     }
 
     private func makeSession(
-        id: String, live: LiveSessionRecord?, desktop: DesktopSessionRecord?, transcript: URL?, now: Date
+        id: String, live: LiveSessionRecord?, desktop: DesktopSessionRecord?, transcript: URL?, unread: Set<String>,
+        now: Date
     ) -> (ProjectLocation, SessionInfo)? {
         // Archived in Claude Desktop = the user dismissed it; still show it while a process is working on it.
         if desktop?.isArchived == true, live == nil { return nil }
@@ -82,9 +86,10 @@ public final class SnapshotBuilder {
         }
 
         let location = projects.resolve(cwd: cwd)
+        let desktopSessionId = desktop?.sessionId ?? live?.hostSessionId
         let session = SessionInfo(
             id: id,
-            desktopSessionId: desktop?.sessionId ?? live?.hostSessionId,
+            desktopSessionId: desktopSessionId,
             title: desktop?.title ?? live?.displayName ?? summary?.title ?? String(localized: "Untitled session"),
             status: status,
             waitingFor: status == .needsInput ? live?.waitingFor : nil,
@@ -101,7 +106,9 @@ public final class SnapshotBuilder {
             pullRequests: desktop?.pullRequests ?? [],
             transcriptPath: transcript?.path,
             model: summary?.model ?? desktop?.model,
-            effort: desktop?.effort
+            effort: desktop?.effort,
+            // Running or blocked sessions already demand attention; "unread" is about a reply waiting to be read.
+            isUnread: (status == .idle || status == .ended) && desktopSessionId.map(unread.contains) == true
         )
         return (location, session)
     }

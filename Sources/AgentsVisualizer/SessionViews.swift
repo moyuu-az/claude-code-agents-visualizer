@@ -28,6 +28,9 @@ struct SessionRow: View {
             StatusGlyph(status: session.status)
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline) {
+                    if session.isUnread {
+                        UnreadDot().transition(.scale.combined(with: .opacity))
+                    }
                     Text(verbatim: session.title)
                         .font(.body.weight(.semibold))
                         .foregroundStyle(session.status == .ended ? .secondary : .primary)
@@ -103,6 +106,17 @@ struct SessionRow: View {
                     .help(Text(verbatim: pr.state.map { "\(pr.url.absoluteString) (\($0.lowercased()))" } ?? pr.url.absoluteString))
             }
         }
+    }
+}
+
+/// Claude for Mac's sidebar dot: the session finished with a reply you have not opened yet.
+struct UnreadDot: View {
+    var body: some View {
+        Image(systemName: "circle.fill")
+            .font(.system(size: 8))
+            .foregroundStyle(.tint)
+            .help(Text("Unread: opening the session in Claude marks it as read"))
+            .accessibilityLabel(Text("Unread"))
     }
 }
 

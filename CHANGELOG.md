@@ -4,6 +4,20 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org).
 Each release on GitHub uses its section below as release notes.
 
+## [Unreleased]
+
+### Added
+
+- **Unread sessions**: sessions that finished while you were looking elsewhere get the same unread dot as in
+  Claude for Mac's sidebar, and an *Unread* counter appears at the top. They show in every time range and in the
+  menu bar until you open them in Claude for Mac. The list is read from Claude for Mac's Local Storage.
+
+### 日本語
+
+- **未読のセッション**: 別の画面を見ている間に完了したセッションに、Claude for Mac のサイドバーと同じ未読の
+  ドットを付け、上部に「未読」の件数を表示します。Claude for Mac で開くまで、表示範囲に関係なく一覧と
+  メニューバーに表示します。未読の一覧は Claude for Mac の Local Storage から読みます。
+
 ## [0.1.0] - 2026-10-07
 
 The first release: every Claude Code session on your Mac, on one screen.
