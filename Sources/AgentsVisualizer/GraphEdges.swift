@@ -15,6 +15,8 @@ struct GraphEdge: Hashable {
     let id: String
     let from: CGPoint
     let to: CGPoint
+    /// Horizontal span in which the edge turns from `from.y` to `to.y`; it runs straight outside it.
+    let bend: ClosedRange<CGFloat>
     let color: Color
     let flow: Flow
 }
@@ -40,10 +42,14 @@ struct GraphEdgesView: NSViewRepresentable {
         // SwiftUI measures from the top; this layer's origin is bottom-left.
         let from = CGPoint(x: edge.from.x, y: height - edge.from.y)
         let to = CGPoint(x: edge.to.x, y: height - edge.to.y)
-        let bend = max(abs(to.x - from.x) * 0.5, 24)
+        let start = CGPoint(x: edge.bend.lowerBound, y: from.y)
+        let end = CGPoint(x: edge.bend.upperBound, y: to.y)
+        let bend = max((end.x - start.x) * 0.5, 24)
         let path = CGMutablePath()
         path.move(to: from)
-        path.addCurve(to: to, control1: CGPoint(x: from.x + bend, y: from.y), control2: CGPoint(x: to.x - bend, y: to.y))
+        path.addLine(to: start)
+        path.addCurve(to: end, control1: CGPoint(x: start.x + bend, y: start.y), control2: CGPoint(x: end.x - bend, y: end.y))
+        path.addLine(to: to)
 
         func stroke(width: CGFloat, alpha: CGFloat) -> CAShapeLayer {
             let line = CAShapeLayer()
