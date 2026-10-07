@@ -197,6 +197,12 @@ import Testing
         try remote("local_done", uuidC, midTurn: false, mirror: [
             Line.user("go", cwd: cwd), Line.assistantTool("Bash", input: ["command": "make"], at: now),
         ])
+        // A mirror that caught up with the running turn shows its tool call, and is newer than the record's turn start.
+        let mirrorFresh = Date(timeIntervalSince1970: now.timeIntervalSince1970.rounded(.down))
+        try remote("local_caught_up", uuidD, midTurn: true, mirror: [
+            Line.user("go", at: mirrorFresh, cwd: cwd),
+            Line.assistantTool("Bash", input: ["command": "make"], at: mirrorFresh),
+        ])
 
         let sessions = Dictionary(uniqueKeysWithValues: build(alive: []).allSessions.map { ($0.title, $0) })
         let busy = try #require(sessions["local_busy"])
@@ -206,11 +212,29 @@ import Testing
         #expect(sessions["local_stale"]?.status == .running)
         #expect(sessions["local_stale"]?.activity == nil)  // that tool call belongs to an older turn
         #expect(sessions["local_done"]?.status == .ended)
+        let caughtUp = try #require(sessions["local_caught_up"])
+        #expect(caughtUp.status == .running)
+        #expect(caughtUp.activity == "Bash · make")
+        #expect(caughtUp.lastActivityAt == mirrorFresh)
 
         // Without Claude for Mac nothing on this Mac drives the remote turn, and its record can no longer change.
         let quit = build(alive: [], desktopRunning: false).allSessions
-        #expect(quit.count == 3)
+        #expect(quit.count == 4)
         #expect(quit.allSatisfy { $0.status == .ended })
+    }
+
+    /// The registry is authoritative whenever a local process exists, also for a remote session.
+    @Test func liveProcessOutranksClaudeForMacsRecordOfARemoteTurn() throws {
+        let cwd = fixture.url("remote/app").path
+        try register(pid: 7, session: uuidA, cwd: cwd, status: "waiting")
+        try desktopSession("local_r", cli: uuidA, [
+            "title": "Remote", "cwd": cwd, "sshConfig": ["sshHost": "pro"], "sshReattach": ["midTurn": true],
+        ])
+        try transcript("ssh-\(uuidA)", uuidA, [Line.user("go", cwd: cwd)])
+
+        let session = try #require(build(alive: [7]).allSessions.first)
+        #expect(session.status == .needsInput)
+        #expect(session.surface == .ssh)
     }
 
     /// Claude for Mac bumps `lastActivityAt` when it merely reopens a session (seen in the wild: a conversation idle since
@@ -223,10 +247,17 @@ import Testing
             "title": "Old talk", "cwd": repo, "lastActivityAt": (now.timeIntervalSince1970 - 60) * 1000,
         ])
         try transcript("-code-app", uuidA, [Line.user("go", at: talked, cwd: repo), Line.assistantText("ok", at: talked)])
+        // Without a transcript, Claude for Mac's timestamp is all there is.
+        let opened = Date(timeIntervalSince1970: (now.timeIntervalSince1970 - 3600).rounded())
+        try desktopSession("local_new", cli: uuidB, [
+            "title": "No prompt yet", "cwd": repo, "lastActivityAt": opened.timeIntervalSince1970 * 1000,
+        ])
 
-        let session = try #require(build(alive: []).allSessions.first)
-        #expect(session.lastActivityAt == talked)
-        #expect(!SessionScope.day.includes(session, now: now))
+        let sessions = Dictionary(uniqueKeysWithValues: build(alive: []).allSessions.map { ($0.title, $0) })
+        let old = try #require(sessions["Old talk"])
+        #expect(old.lastActivityAt == talked)
+        #expect(!SessionScope.day.includes(old, now: now))
+        #expect(sessions["No prompt yet"]?.lastActivityAt == opened)
     }
 
     @Test func relocatedSessionGroupsUnderItsNewFolder() throws {

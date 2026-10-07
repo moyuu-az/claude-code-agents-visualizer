@@ -5,10 +5,10 @@ import Testing
 func makeSession(
     id: String = "4b8a9872-18af-4471-b2cf-eb5301cdaff3", desktopId: String? = nil, title: String = "Session",
     status: SessionStatus = .idle, cwd: String = "/repo", branch: String? = nil, worktree: String? = nil,
-    lastActivityAt: Date? = nil, agents: [AgentInfo] = []
+    lastActivityAt: Date? = nil, agents: [AgentInfo] = [], surface: SessionSurface = .desktop
 ) -> SessionInfo {
     SessionInfo(
-        id: id, desktopSessionId: desktopId, title: title, status: status, waitingFor: nil, surface: .desktop,
+        id: id, desktopSessionId: desktopId, title: title, status: status, waitingFor: nil, surface: surface,
         sshHost: nil, cwd: cwd, worktreeName: worktree, branch: branch, pid: nil, startedAt: nil,
         lastActivityAt: lastActivityAt, activity: nil, agents: agents, pullRequests: [], transcriptPath: nil)
 }
@@ -57,11 +57,7 @@ func makeSession(
 
     /// The conversation lives on the SSH host: Claude for Mac opens it over its own connection, a local CLI cannot.
     @Test func sshSessionsOpenOnlyInClaudeForMac() {
-        let ssh = SessionInfo(
-            id: "4b8a9872-18af-4471-b2cf-eb5301cdaff3", desktopSessionId: "local_7380e0f6-ae09-4dd9-aaea-2f0769f879a4",
-            title: "Remote", status: .running, waitingFor: nil, surface: .ssh, sshHost: "pro", cwd: "/repo",
-            worktreeName: nil, branch: nil, pid: nil, startedAt: nil, lastActivityAt: nil, activity: nil, agents: [],
-            pullRequests: [], transcriptPath: nil)
+        let ssh = makeSession(desktopId: "local_7380e0f6-ae09-4dd9-aaea-2f0769f879a4", surface: .ssh)
         #expect(ClaudeDeepLink.url(for: ssh)?.absoluteString
                 == "claude://code/continue?session=local_7380e0f6-ae09-4dd9-aaea-2f0769f879a4")
         #expect(ClaudeDeepLink.resumeCommand(for: ssh) == nil)
