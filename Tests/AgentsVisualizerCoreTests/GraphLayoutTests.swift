@@ -122,8 +122,9 @@ import Testing
 }
 
 @Suite struct GraphRowLayoutTests {
-    let layout = GraphRowLayout(projectWidth: 200, session: CGSize(width: 260, height: 100), columnGap: 50,
-                                zigzagGap: 20, rowGap: 12, agentGap: 10)
+    let layout = GraphRowLayout(projectWidth: 200, session: CGSize(width: 260, height: 100),
+                                agent: CGSize(width: 250, height: 40), columnGap: 50, zigzagGap: 20, rowGap: 12,
+                                agentGap: 10, toggleWidth: 40)
 
     @Test func sessionsAlternateColumnsWithTheSecondHalfARowLower() {
         let frames = layout.frames(projectHeight: 80, agentStacks: [nil, nil, nil, nil, nil])
@@ -206,5 +207,103 @@ import Testing
         let frames = layout.frames(projectHeight: 80, agentStacks: [])
         #expect(frames.sessions.isEmpty)
         #expect(frames.size == CGSize(width: 200, height: 80))
+    }
+}
+
+@Suite struct GraphAgentLinesTests {
+    let layout = GraphRowLayout.standard
+
+    /// The point of agent lines: a project with agents on every session is no taller than without them, and every
+    /// line sits level with its session so its edge runs straight.
+    @Test(arguments: [1, 2, 5, 8])
+    func oneLineOfAgentsPerSessionNeitherMovesNorGrowsAnything(sessions: Int) {
+        let line = CGSize(width: layout.agent.width * 3 + layout.agentGap * 2, height: layout.agent.height)
+        let bare = layout.frames(projectHeight: 80, agentStacks: Array(repeating: nil, count: sessions))
+        let busy = layout.frames(projectHeight: 80, agentStacks: Array(repeating: line, count: sessions))
+        #expect(busy.sessions == bare.sessions)
+        #expect(busy.size.height == bare.size.height)
+        for (session, agents) in zip(busy.sessions, busy.agents) {
+            #expect(agents?.midY == session.midY)
+        }
+    }
+
+    @Test(arguments: [900, 1200, 1650, 2400, 3440] as [CGFloat])
+    func agentColumnsFillTheWidthRightOfTheSessionsWithRoomForTheToggle(width: CGFloat) {
+        let columns = layout.agentColumns(width: width)
+        func lineEnd(_ count: Int) -> CGFloat {
+            layout.agentsX + CGFloat(count) * (layout.agent.width + layout.agentGap) + layout.toggleWidth
+        }
+        #expect(columns >= 1)
+        if columns > 1 { #expect(lineEnd(columns) <= width) }
+        #expect(lineEnd(columns + 1) > width)
+    }
+
+    @Test(arguments: [0, -50, 400, .nan, .infinity] as [CGFloat])
+    func agentColumnsIsOneWhenNothingFits(width: CGFloat) {
+        #expect(layout.agentColumns(width: width) == 1)
+    }
+
+    func agent(_ id: String, _ status: AgentStatus) -> AgentInfo {
+        AgentInfo(id: id, agentType: "code-reviewer", description: id, status: status, isBackground: true,
+                  startedAt: nil, lastActivityAt: nil, activity: nil)
+    }
+
+    func ids(_ agents: [AgentInfo]) -> [String] { agents.map(\.id) }
+
+    @Test func runningAgentsComeFirstAndFinishedOnesFillTheRestOfTheLine() {
+        let agents = [agent("r1", .running), agent("f1", .completed), agent("f2", .failed), agent("f3", .stopped),
+                      agent("r2", .running)]
+        let (shown, overflow) = GraphRowLayout.agentsToShow(agents, columns: 3, expanded: false)
+        #expect(ids(shown) == ["r1", "r2", "f1"])
+        #expect(overflow == 2)
+    }
+
+    @Test func expandingShowsEveryAgentAndKeepsTheOverflowForTheToggle() {
+        let agents = [agent("r1", .running), agent("f1", .completed), agent("f2", .completed), agent("f3", .completed)]
+        let (shown, overflow) = GraphRowLayout.agentsToShow(agents, columns: 2, expanded: true)
+        #expect(ids(shown) == ["r1", "f1", "f2", "f3"])
+        #expect(overflow == 2)
+    }
+
+    /// A fan-out of running agents wraps onto more lines; none of them is ever hidden behind the toggle.
+    @Test func runningAgentsAreNeverHiddenEvenBeyondOneLine() {
+        let agents = (1...5).map { agent("r\($0)", .running) } + [agent("f1", .completed)]
+        let (shown, overflow) = GraphRowLayout.agentsToShow(agents, columns: 3, expanded: false)
+        #expect(ids(shown) == ["r1", "r2", "r3", "r4", "r5"])
+        #expect(overflow == 1)
+    }
+
+    @Test func noToggleWhenEverythingFits() {
+        let agents = [agent("f1", .completed), agent("f2", .completed)]
+        #expect(GraphRowLayout.agentsToShow(agents, columns: 2, expanded: false).overflow == 0)
+        #expect(GraphRowLayout.agentsToShow(agents, columns: 2, expanded: true).overflow == 0)
+        #expect(GraphRowLayout.agentsToShow([], columns: 2, expanded: false).shown.isEmpty)
+    }
+
+    /// The narrowest window still shows one agent per session, not just a toggle.
+    @Test(arguments: [0, 1])
+    func oneColumnStillShowsTheLatestFinishedAgent(columns: Int) {
+        let agents = [agent("f1", .completed), agent("f2", .completed)]
+        let (shown, overflow) = GraphRowLayout.agentsToShow(agents, columns: columns, expanded: false)
+        #expect(ids(shown) == ["f1"])
+        #expect(overflow == 1)
+    }
+}
+
+@Suite struct ProjectNameLineTests {
+    @Test(arguments: [
+        ("claude-code-agents-visualizer", "claude-code-\nagents-visualizer"),
+        ("dexerials_minutes_app", "dexerials_\nminutes_app"),
+        ("my project name", "my \nproject name"),
+        ("api.example.com", "api.\nexample.com"),
+    ])
+    func breaksAfterTheSeparatorNearestTheMiddle(name: String, expected: String) {
+        #expect(GraphRowLayout.twoLineName(name) == expected)
+    }
+
+    /// Nothing to break at, or only at the very end: the text view wraps it as best it can.
+    @Test(arguments: ["Scratch", "議事録アプリ", "trailing-", "", "-"])
+    func namesWithoutAnInnerSeparatorStayAsTheyAre(name: String) {
+        #expect(GraphRowLayout.twoLineName(name) == name)
     }
 }

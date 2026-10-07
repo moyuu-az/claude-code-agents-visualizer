@@ -9,29 +9,37 @@ struct GraphPage: View {
     let scope: SessionScope
     let isFiltered: Bool
 
+    static let padding: CGFloat = 16
+
     var body: some View {
         VStack(spacing: 0) {
-            ScrollView([.vertical, .horizontal]) {
-                VStack(alignment: .leading, spacing: 18) {
-                    HStack(alignment: .center, spacing: 12) {
-                        SummaryStrip(snapshot: snapshot)
-                        AgentLegend(snapshot: snapshot)
-                    }
-                    if projects.isEmpty {
-                        EmptyState(scope: scope, isSearching: isFiltered)
-                    } else {
-                        // Same shared clock as the dashboard, so relative times tick together.
-                        TimelineView(.periodic(from: .now, by: 30)) { context in
-                            GraphCanvas(projects: DashboardFilter.stableOrder(projects))
-                                .environment(\.dashboardClock, context.date)
+            GeometryReader { viewport in
+                ScrollView([.vertical, .horizontal]) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(alignment: .center, spacing: 12) {
+                            SummaryStrip(snapshot: snapshot)
+                            AgentLegend(snapshot: snapshot)
+                        }
+                        if projects.isEmpty {
+                            EmptyState(scope: scope, isSearching: isFiltered)
+                        } else {
+                            // Same shared clock as the dashboard, so relative times tick together.
+                            TimelineView(.periodic(from: .now, by: 30)) { context in
+                                // 16 more for a legacy (always shown) vertical scroller, which takes its width from
+                                // the viewport; without it the last agent column would scroll sideways.
+                                GraphCanvas(projects: DashboardFilter.stableOrder(projects),
+                                            agentColumns: GraphCanvas.geometry.agentColumns(
+                                                width: viewport.size.width - Self.padding * 2 - 16))
+                                    .environment(\.dashboardClock, context.date)
+                            }
                         }
                     }
+                    .padding(Self.padding)
+                    .frame(minWidth: 940, alignment: .leading)
                 }
-                .padding(20)
-                .frame(minWidth: 940, alignment: .leading)
             }
             ActivityLog(events: events)
-                .padding([.horizontal, .bottom], 16)
+                .padding([.horizontal, .bottom], 12)
         }
     }
 }
@@ -42,7 +50,6 @@ private enum GraphNode: Hashable {
     case project(String)
     case session(String)
     case agent(session: String, agent: String)
-    case more(session: String)
 }
 
 private struct NodeAnchors: PreferenceKey {
@@ -58,19 +65,19 @@ private extension View {
     }
 }
 
-/// Per project: the project node, its sessions in two staggered columns (`GraphRowLayout`) and each session's agents.
-/// Nodes report their frames through anchor preferences; the edges are drawn behind them from those frames.
+/// Per project: the project node, its sessions in two staggered columns (`GraphRowLayout`) and each session's agents
+/// in lines of `agentColumns`. Nodes report their frames through anchor preferences; the edges are drawn behind them
+/// from those frames.
 private struct GraphCanvas: View {
     let projects: [ProjectGroup]
+    let agentColumns: Int
     // `@State` is a compiler macro in the macOS 27 SDK (see AgentList); a stored `State` value builds everywhere.
     private let expandedState = State(initialValue: Set<String>())
 
-    static let geometry = GraphRowLayout(projectWidth: 210, session: CGSize(width: 260, height: 104), columnGap: 56,
-                                         zigzagGap: 20, rowGap: 12, agentGap: 14)
-    static let finishedShown = 2
+    static let geometry = GraphRowLayout.standard
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 26) {
+        VStack(alignment: .leading, spacing: 16) {
             ForEach(projects) { project in
                 GraphRow(geometry: Self.geometry) {
                     ProjectNode(project: project)
@@ -81,9 +88,9 @@ private struct GraphCanvas: View {
                             .frame(width: Self.geometry.session.width, height: Self.geometry.session.height)
                             .graphNode(.session(session.id))
                             .layoutValue(key: GraphSlot.self, value: .session(index))
-                        let (visible, hidden) = agentsToShow(session)
-                        if !visible.isEmpty || hidden > 0 {
-                            agentStack(session, visible: visible, hidden: hidden)
+                        let (shown, overflow) = agentsToShow(session)
+                        if !shown.isEmpty {
+                            agentLines(session, shown: shown, overflow: overflow)
                                 .layoutValue(key: GraphSlot.self, value: .agents(index))
                         }
                     }
@@ -100,29 +107,33 @@ private struct GraphCanvas: View {
         .animation(.smooth(duration: 0.45), value: structure)
     }
 
-    private func agentStack(_ session: SessionInfo, visible: [AgentInfo], hidden: Int) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            ForEach(visible) { agent in
-                AgentNode(session: session, agent: agent)
-                    .graphNode(.agent(session: session.id, agent: agent.id))
-                    .transition(.opacity)
-            }
-            if hidden > 0 {
-                MoreAgentsChip(count: hidden, expanded: expandedState.wrappedValue.contains(session.id)) {
-                    expandedState.wrappedValue.formSymmetricDifference([session.id])
+    /// `shown` in lines of `agentColumns`, the toggle for the `overflow` at the end of the last line, where
+    /// `agentColumns` leaves room for it.
+    private func agentLines(_ session: SessionInfo, shown: [AgentInfo], overflow: Int) -> some View {
+        let gap = Self.geometry.agentGap
+        let lines = stride(from: 0, to: shown.count, by: agentColumns)
+            .map { Array(shown[$0..<min($0 + agentColumns, shown.count)]) }
+        return VStack(alignment: .leading, spacing: gap) {
+            ForEach(lines.indices, id: \.self) { line in
+                HStack(spacing: gap) {
+                    ForEach(lines[line]) { agent in
+                        AgentNode(session: session, agent: agent)
+                            .graphNode(.agent(session: session.id, agent: agent.id))
+                            .transition(.opacity)
+                    }
+                    if overflow > 0, line == lines.count - 1 {
+                        MoreAgentsToggle(count: overflow, expanded: expandedState.wrappedValue.contains(session.id)) {
+                            expandedState.wrappedValue.formSymmetricDifference([session.id])
+                        }
+                    }
                 }
-                .graphNode(.more(session: session.id))
             }
         }
     }
 
-    /// Running agents always; finished ones only the latest few unless the user expands the session.
-    private func agentsToShow(_ session: SessionInfo) -> (visible: [AgentInfo], hidden: Int) {
-        let running = session.agents.filter(\.status.isActive)
-        let finished = session.agents.filter { !$0.status.isActive }
-        if expandedState.wrappedValue.contains(session.id) { return (running + finished, finished.count > Self.finishedShown ? 1 : 0) }
-        let shown = Array(finished.prefix(Self.finishedShown))
-        return (running + shown, finished.count - shown.count)
+    private func agentsToShow(_ session: SessionInfo) -> (shown: [AgentInfo], overflow: Int) {
+        GraphRowLayout.agentsToShow(session.agents, columns: agentColumns,
+                                    expanded: expandedState.wrappedValue.contains(session.id))
     }
 
     /// What changes the drawing's shape; timestamps and activity text deliberately excluded so routine refreshes do
@@ -137,7 +148,9 @@ private struct GraphCanvas: View {
 
     /// Edges bend only in the gap right after the project or right before the agents, and run straight elsewhere: an
     /// edge to a second-column session crosses the first column, and one from a first-column session crosses the
-    /// second, both at the session's height, which `GraphRowLayout` keeps clear of cards.
+    /// second, both at the session's height, which `GraphRowLayout` keeps clear of cards. Only the first agent of each
+    /// line gets an edge: one to the next would run under its neighbour. Running agents come first, so that edge
+    /// flows whenever any agent of its line runs.
     private func edges(_ frames: [GraphNode: CGRect]) -> [GraphEdge] {
         let gap = Self.geometry.columnGap
         var edges: [GraphEdge] = []
@@ -150,17 +163,13 @@ private struct GraphCanvas: View {
                     id: "p-\(session.id)", from: projectFrame.trailingCenter, to: sessionFrame.leadingCenter,
                     bend: toSessions, color: session.status == .ended ? .secondary : session.status.color,
                     flow: Self.flow(for: session.status)))
-                for agent in session.agents {
+                let shown = agentsToShow(session).shown
+                for agent in stride(from: 0, to: shown.count, by: agentColumns).map({ shown[$0] }) {
                     guard let agentFrame = frames[.agent(session: session.id, agent: agent.id)] else { continue }
                     edges.append(GraphEdge(
                         id: "a-\(session.id)-\(agent.id)", from: sessionFrame.trailingCenter, to: agentFrame.leadingCenter,
                         bend: (agentFrame.minX - gap)...agentFrame.minX,
                         color: agent.typeColor, flow: agent.status.isActive ? .active : .faded))
-                }
-                if let moreFrame = frames[.more(session: session.id)] {
-                    edges.append(GraphEdge(id: "m-\(session.id)", from: sessionFrame.trailingCenter,
-                                           to: moreFrame.leadingCenter, bend: (moreFrame.minX - gap)...moreFrame.minX,
-                                           color: .secondary, flow: .faded))
                 }
             }
         }
@@ -234,23 +243,18 @@ private struct ProjectNode: View {
     var body: some View {
         let top = project.topStatus
         let busy = project.sessions.contains { $0.status == .running }
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: 5) {
+            // The icon shares its row with the counts, so the name gets the node's full width: the column is narrow
+            // and repository names are long.
+            HStack(spacing: 8) {
                 ZStack {
                     if busy { SpinnerRing(color: .green, lineWidth: 2, showsTrack: false, showsCore: false, period: 2.4) }
                     Image(systemName: project.name == "Scratch" ? "tray.fill" : "folder.fill")
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(top == .ended ? Color.secondary : top.color)
                 }
-                .frame(width: 34, height: 34)
+                .frame(width: 28, height: 28)
                 .glassSurface(Circle(), tint: top == .ended ? nil : top.color.opacity(0.22))
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(verbatim: project.name).font(.headline).lineLimit(1)
-                    Text(verbatim: (project.path as NSString).abbreviatingWithTildeInPath)
-                        .font(.caption2).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
-                }
-            }
-            HStack(spacing: 10) {
                 ForEach([SessionStatus.needsInput, .running, .idle, .ended], id: \.self) { status in
                     let count = project.sessions.count { $0.status == status }
                     if count > 0 {
@@ -267,10 +271,19 @@ private struct ProjectNode: View {
                 }
             }
             .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 1) {
+                ViewThatFits(in: .horizontal) {
+                    Text(verbatim: project.name).lineLimit(1)
+                    Text(verbatim: GraphRowLayout.twoLineName(project.name)).lineLimit(2)
+                }
+                .font(.headline)
+                Text(verbatim: (project.path as NSString).abbreviatingWithTildeInPath)
+                    .font(.caption2).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+            }
         }
-        .padding(14)
+        .padding(10)
         .frame(width: GraphCanvas.geometry.projectWidth, alignment: .leading)
-        .glassSurface(RoundedRectangle(cornerRadius: 20, style: .continuous),
+        .glassSurface(RoundedRectangle(cornerRadius: 16, style: .continuous),
                       tint: top == .needsInput ? Color.orange.opacity(0.14) : nil)
         .help(Text(verbatim: project.path))
     }
@@ -282,21 +295,21 @@ private struct SessionNode: View {
 
     var body: some View {
         Button { model.open(session) } label: {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(alignment: .top, spacing: 8) {
-                    StatusGlyph(status: session.status)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(alignment: .top, spacing: 6) {
+                    StatusGlyph(status: session.status, size: 12)
                     // Unread sessions show in every time range; without the dot an ended one would look misplaced.
-                    if session.isUnread { UnreadDot().padding(.top, 4) }
+                    if session.isUnread { UnreadDot().padding(.top, 3) }
                     Text(verbatim: session.title)
                         .font(.callout.weight(.semibold))
                         .foregroundStyle(session.status == .ended ? .secondary : .primary)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
-                    Spacer(minLength: 4)
+                    Spacer(minLength: 2)
                     RelativeTime(date: session.lastActivityAt).font(.caption2).foregroundStyle(.secondary)
                 }
-                HStack(spacing: 5) {
-                    Text(session.status.label).font(.caption2.weight(.bold)).foregroundStyle(session.status.color)
+                // No status label: the glyph and the card's tint already say it, and the tags need the width.
+                HStack(spacing: 4) {
                     if let model = ModelName.display(session.model) {
                         Tag(text: Text(verbatim: [model, session.effort].compactMap { $0 }.joined(separator: " · ")),
                             symbol: "sparkle", tint: .indigo)
@@ -320,21 +333,23 @@ private struct SessionNode: View {
                         .accessibilityRepresentation { Text(verbatim: activity) }
                 }
             }
-            .padding(12)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
             // Fixed size, set by GraphCanvas: a card that grew with its status would push the whole graph around.
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background {
                 switch session.status {
-                case .needsInput: BreathingFill(color: Color.orange.opacity(0.22), cornerRadius: 18)
-                case .running: BreathingFill(color: Color.green.opacity(0.10), cornerRadius: 18)
+                case .needsInput: BreathingFill(color: Color.orange.opacity(0.22), cornerRadius: 14)
+                case .running: BreathingFill(color: Color.green.opacity(0.10), cornerRadius: 14)
                 case .idle, .ended: EmptyView()
                 }
             }
-            .glassSurface(RoundedRectangle(cornerRadius: 18, style: .continuous), tint: tint, interactive: true)
-            .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .glassSurface(RoundedRectangle(cornerRadius: 14, style: .continuous), tint: tint, interactive: true)
+            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .buttonStyle(.plain)
-        .help(Text("Open in Claude"))
+        .help(Text(verbatim: session.title + "\n") + Text(session.status.label) + Text(verbatim: " · ") + Text("Open in Claude"))
+        .accessibilityValue(Text(session.status.label))
         .contextMenu { SessionMenu(session: session) }
     }
 
@@ -347,6 +362,8 @@ private struct SessionNode: View {
     }
 }
 
+/// One agent at `GraphRowLayout.agent` size: what it was asked to do on top, its type and model (or, while it runs,
+/// what it is doing right now) underneath, and its timer or final state on the right.
 private struct AgentNode: View {
     let session: SessionInfo
     let agent: AgentInfo
@@ -354,81 +371,81 @@ private struct AgentNode: View {
 
     var body: some View {
         Button { model.open(session) } label: {
-            HStack(alignment: .center, spacing: 9) {
-                AgentAvatar(agent: agent, size: 28)
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 5) {
-                        Text(verbatim: agent.agentType)
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(agent.status.isActive ? agent.typeColor : .secondary)
+            HStack(alignment: .center, spacing: 7) {
+                AgentAvatar(agent: agent, size: 22)
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 4) {
+                        Text(verbatim: agent.description)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(agent.status.isActive ? .primary : .secondary)
                             .lineLimit(1)
-                            .layoutPriority(1)
-                        if let model = ModelName.display(agent.model) {
-                            Text(verbatim: model).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
-                        }
-                        Spacer(minLength: 4)
+                        Spacer(minLength: 2)
                         if agent.status.isActive, let startedAt = agent.startedAt {
                             Text(timerInterval: min(startedAt, .distantFuture)...Date.distantFuture, countsDown: false)
                                 .font(.caption2.monospacedDigit())
                                 .foregroundStyle(agent.typeColor)
-                                .frame(minWidth: 32, alignment: .trailing)
+                                .fixedSize()
                         } else if !agent.status.isActive {
-                            HStack(spacing: 3) {
-                                AgentStatusMark(status: agent.status)
-                                Text(agent.status.label).font(.caption2).foregroundStyle(agent.status.color)
-                            }
-                            .fixedSize()  // the model name truncates first, never the status
+                            AgentStatusMark(status: agent.status)
                         }
                     }
-                    Text(verbatim: agent.description)
-                        .font(.caption)
-                        .foregroundStyle(agent.status.isActive ? .primary : .secondary)
-                        .lineLimit(1)
-                    // Kept while the agent runs, empty between tool calls: a line that came and went with every tool
-                    // call would resize the card and push the agent stacks below it around.
-                    if agent.status.isActive {
-                        ShimmerText(text: agent.activity ?? "")
-                            .accessibilityRepresentation { Text(verbatim: agent.activity ?? "") }
-                            .accessibilityHidden(agent.activity == nil)
+                    HStack(spacing: 4) {
+                        Text(verbatim: agent.agentType)
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(agent.status.isActive ? agent.typeColor : .secondary)
+                            .lineLimit(1)
+                            .fixedSize()
+                        // Kept while the agent runs, empty between tool calls, like the card's size: a line that came
+                        // and went with every tool call would flicker the model name in and out.
+                        if agent.status.isActive {
+                            ShimmerText(text: agent.activity ?? "")
+                                .accessibilityRepresentation { Text(verbatim: agent.activity ?? "") }
+                                .accessibilityHidden(agent.activity == nil)
+                        } else if let model = ModelName.display(agent.model) {
+                            Text(verbatim: model).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                        }
                     }
                 }
             }
-            .padding(.horizontal, 11)
-            .padding(.vertical, 8)
-            .frame(width: 250, alignment: .leading)
+            .padding(.horizontal, 8)
+            .frame(width: GraphCanvas.geometry.agent.width, height: GraphCanvas.geometry.agent.height, alignment: .leading)
             .background {
-                if agent.status.isActive { BreathingFill(color: agent.typeColor.opacity(0.16), cornerRadius: 14) }
+                if agent.status.isActive { BreathingFill(color: agent.typeColor.opacity(0.16), cornerRadius: 11) }
             }
-            .glassSurface(RoundedRectangle(cornerRadius: 14, style: .continuous),
+            .glassSurface(RoundedRectangle(cornerRadius: 11, style: .continuous),
                           tint: agent.status.isActive ? agent.typeColor.opacity(0.14) : nil, interactive: true)
             .opacity(agent.status.isActive ? 1 : 0.72)
-            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
         }
         .buttonStyle(.plain)
-        .help(Text("Open the parent session in Claude"))
+        // The card truncates the description; the tooltip has all of it and the final state in words.
+        .help(Text(verbatim: "\(agent.agentType): \(agent.description)\n") + Text(agent.status.label) + Text(verbatim: " · ")
+              + Text("Open the parent session in Claude"))
+        .accessibilityValue(Text(agent.status.label))
     }
 }
 
-private struct MoreAgentsChip: View {
+/// "+n" at the end of a session's agent line for the finished agents that did not fit; a chevron to fold them back.
+private struct MoreAgentsToggle: View {
     let count: Int
     let expanded: Bool
     let toggle: () -> Void
 
     var body: some View {
+        let label = expanded ? Text("Hide finished agents") : Text("Show finished agents (\(count))")
         Button(action: { withAnimation(.snappy) { toggle() } }) {
-            Label {
-                if expanded { Text("Hide finished agents") } else { Text("Show finished agents (\(count))") }
-            } icon: {
-                Image(systemName: expanded ? "chevron.up" : "ellipsis")
+            Group {
+                if expanded { Image(systemName: "chevron.up") } else { Text(verbatim: "+\(count)") }
             }
-            .font(.caption)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .glassSurface(Capsule(), interactive: true)
-            .contentShape(Capsule())
+            .font(.caption.weight(.semibold).monospacedDigit())
+            .frame(width: GraphCanvas.geometry.toggleWidth, height: GraphCanvas.geometry.agent.height)
+            .glassSurface(RoundedRectangle(cornerRadius: 11, style: .continuous), interactive: true)
+            .contentShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
         }
         .buttonStyle(.plain)
         .foregroundStyle(.secondary)
+        .help(label)
+        .accessibilityLabel(label)
     }
 }
 
@@ -467,7 +484,7 @@ private struct ActivityLog: View {
     static let visibleCount = 6
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 4) {
             Label("Activity", systemImage: "waveform.path.ecg")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
@@ -477,7 +494,7 @@ private struct ActivityLog: View {
                     .foregroundStyle(.tertiary)
                     .frame(maxWidth: .infinity, minHeight: 60, alignment: .leading)
             } else {
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 1) {
                     ForEach(events.prefix(Self.visibleCount)) { event in
                         ActivityRow(event: event)
                             .transition(.push(from: .top).combined(with: .opacity))
@@ -486,9 +503,10 @@ private struct ActivityLog: View {
                 .animation(.snappy, value: events.prefix(Self.visibleCount).map(\.id))
             }
         }
-        .padding(12)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassSurface(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .glassSurface(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
 

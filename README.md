@@ -37,7 +37,8 @@ What was I doing in the other repo?"* This app answers that at a glance.
 - **Agent graph page** (⌘2): projects → sessions → agents as a living network. Glowing particles travel along the
   paths where work is happening, each node shows the model (e.g. `Opus 5.5 · xhigh`) and what it is doing, and an
   activity log lists agents starting and finishing and sessions starting, finishing turns or needing you.
-  Sessions sit in two staggered columns so a busy project stays on one screen, and nodes keep their place: projects
+  Sessions sit in two staggered columns and each session's agents fill a line across the rest of the window, with
+  `+n` for the finished ones that do not fit, so a busy project stays on one screen. Nodes keep their place: projects
   in name order, sessions oldest first with new ones added at the end. ⌘1 returns to the card dashboard.
 - **One click to open** the session in Claude for Mac. Sessions started in a terminal or IDE are imported into
   Claude for Mac after a confirmation (or copy the `claude --resume` command instead).

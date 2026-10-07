@@ -20,6 +20,12 @@ Each release on GitHub uses its section below as release notes.
   longer bounce.
 - **Agent graph**: sessions sit in two staggered columns, the second half a row lower, so a project takes about half
   the height. Edges run through the gaps between cards instead of under them.
+- **Agent graph**: a session's agents fill a line across the width the window has left, instead of one column that
+  made a project with many agents several screens tall. Running agents always show; finished ones fill the rest of
+  the line, and `+n` shows the others. A project is now as tall as its sessions. Cards are more compact: session
+  cards drop the status label (the icon and tint show it) and agent cards fit what they were asked to do, their type,
+  model or current tool, and their timer or result on two lines, with the full text in the tooltip. The project node
+  is narrower, the counters at the top and the activity log are shorter.
 
 ### Fixed
 
@@ -43,6 +49,12 @@ Each release on GitHub uses its section below as release notes.
   アクティビティ行を保ちます。アニメーションの跳ね返りもなくしました。
 - **エージェントグラフ**: セッションを 2 列に並べ、右列を半段ずらしました（ジャバラ配置）。プロジェクトの高さは
   ほぼ半分になります。線はカードの下をくぐらず、カードのすき間を通ります。
+- **エージェントグラフ**: セッションのエージェントを、縦 1 列ではなくウィンドウの残りの幅に横 1 行で並べます。
+  エージェントの多いプロジェクトが何画面分も縦に伸びることはなくなり、プロジェクトの高さはセッション分だけに
+  なります。実行中のエージェントは常に表示し、完了済みは行の残りに並べ、収まらない分は `+n` で開きます。
+  カードも詰めました。セッションのカードは状態ラベルを省き（アイコンと色で分かります）、エージェントのカードは
+  依頼内容・種類・モデルまたは実行中のツール・経過時間または結果を 2 行に収め、全文はツールチップに出します。
+  プロジェクトのノードを細くし、上部の件数とアクティビティログの高さも詰めました。
 - **メニューバーのパネル**: 幅を 440 pt に広げました。上部の件数は、端で切れていたカプセルをやめ、数値の下に
   ラベルを置いた同じ幅のタイルにしました。セッション一覧は 1 行半で切れず、行数に合わせた高さ
   （最大 480 pt）で表示します。

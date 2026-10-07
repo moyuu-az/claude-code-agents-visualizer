@@ -165,15 +165,15 @@ struct SummaryStrip: View {
                     .padding(.vertical, 8)
                     .glassSurface(RoundedRectangle(cornerRadius: 14, style: .continuous), tint: tint)
                 } else {
-                    HStack(alignment: .center, spacing: 8) {
-                        icon(size: 13)
-                        number(.title2)
+                    HStack(alignment: .center, spacing: 6) {
+                        icon(size: 12)
+                        number(.title3)
                         label
                             .font(.callout)
                             .foregroundStyle(.secondary)
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 5)
                     .glassSurface(Capsule(), tint: tint)
                 }
             }
