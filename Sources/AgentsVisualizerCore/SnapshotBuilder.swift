@@ -47,7 +47,7 @@ public final class SnapshotBuilder {
         var grouped: [String: (location: ProjectLocation, sessions: [SessionInfo])] = [:]
         for id in ids {
             guard let (location, session) = makeSession(
-                id: id, live: live[id], desktop: desktop[id], transcript: transcriptFiles[id], unread: unread, now: now)
+                id: id, live: live[id], desktopRecords: desktop[id] ?? [], transcript: transcriptFiles[id], unread: unread, now: now)
             else { continue }
             grouped[location.root, default: (location, [])].sessions.append(session)
         }
@@ -61,9 +61,10 @@ public final class SnapshotBuilder {
     }
 
     private func makeSession(
-        id: String, live: LiveSessionRecord?, desktop: DesktopSessionRecord?, transcript: URL?, unread: Set<String>,
-        now: Date
+        id: String, live: LiveSessionRecord?, desktopRecords: [DesktopSessionRecord], transcript: URL?,
+        unread: Set<String>, now: Date
     ) -> (ProjectLocation, SessionInfo)? {
+        let desktop = desktopRecords.first
         // Archived in Claude Desktop = the user dismissed it; still show it while a process is working on it.
         if desktop?.isArchived == true, live == nil { return nil }
         let summary = transcript.flatMap { transcripts.summary(of: $0) }
@@ -86,7 +87,13 @@ public final class SnapshotBuilder {
         }
 
         let location = projects.resolve(cwd: cwd)
-        let desktopSessionId = desktop?.sessionId ?? live?.hostSessionId
+        // Running or blocked sessions already demand attention; "unread" is about a reply waiting to be read.
+        // Shared by the link and the dot, so a dot never links to a record that cannot clear it.
+        let canBeUnread = status == .idle || status == .ended
+        // Claude can put its unread dot on any of the session's records (e.g. continued twice). Link to that one, since
+        // only opening it in Claude clears the dot; otherwise the most recently active record.
+        let unreadRecord = canBeUnread ? desktopRecords.first { unread.contains($0.sessionId) } : nil
+        let desktopSessionId = unreadRecord?.sessionId ?? desktop?.sessionId ?? live?.hostSessionId
         let session = SessionInfo(
             id: id,
             desktopSessionId: desktopSessionId,
@@ -107,8 +114,7 @@ public final class SnapshotBuilder {
             transcriptPath: transcript?.path,
             model: summary?.model ?? desktop?.model,
             effort: desktop?.effort,
-            // Running or blocked sessions already demand attention; "unread" is about a reply waiting to be read.
-            isUnread: (status == .idle || status == .ended) && desktopSessionId.map(unread.contains) == true
+            isUnread: canBeUnread && desktopSessionId.map(unread.contains) == true
         )
         return (location, session)
     }
