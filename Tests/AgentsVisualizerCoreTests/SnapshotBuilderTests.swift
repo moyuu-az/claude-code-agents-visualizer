@@ -261,6 +261,20 @@ import Testing
         #expect(session.desktopSessionId == "local_new")
     }
 
+    /// Among several records for one CLI session, only the most recently active one says whether it was dismissed.
+    @Test func mostRecentDesktopRecordDecidesWhetherArchived() throws {
+        let repo = fixture.url("code/app").path
+        try fixture.makeDirectory("code/app/.git")
+        let earlier = (now.timeIntervalSince1970 - 600) * 1000, later = now.timeIntervalSince1970 * 1000
+        try desktopSession("local_a_old", cli: uuidA, ["title": "Dismissed earlier", "isArchived": true, "cwd": repo,
+                                                       "lastActivityAt": earlier])
+        try desktopSession("local_a_new", cli: uuidA, ["title": "Continued", "cwd": repo, "lastActivityAt": later])
+        try desktopSession("local_b_old", cli: uuidB, ["title": "Older copy", "cwd": repo, "lastActivityAt": earlier])
+        try desktopSession("local_b_new", cli: uuidB, ["title": "Dismissed now", "isArchived": true, "cwd": repo,
+                                                       "lastActivityAt": later])
+        #expect(build(alive: []).allSessions.map(\.title) == ["Continued"])
+    }
+
     @Test func reportsMissingClaudeDirectory() {
         let snapshot = build(alive: [])
         #expect(snapshot.issues == [.claudeDirectoryMissing(path: fixture.claudeDirectory.path)])
