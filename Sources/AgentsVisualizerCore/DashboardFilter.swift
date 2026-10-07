@@ -31,30 +31,27 @@ public enum DashboardFilter {
         }
     }
 
-    /// Order for the graph page, where nodes have to stay put to be followed: live first, then newest started first.
-    /// Only a session starting or ending moves anything. The snapshot's urgency order also follows status and last
-    /// activity, which change every few seconds, so the graph would reshuffle on almost every refresh.
+    /// Order for the graph page, where nodes have to stay put to be followed: projects by name, sessions oldest started
+    /// first. Status, activity and sessions ending never move anything, and a new session goes to the end: on the
+    /// two-column graph, one inserted at the top would move every other session to the other column. The snapshot's
+    /// urgency order follows status and last activity, which change every few seconds.
     public static func stableOrder(_ projects: [ProjectGroup]) -> [ProjectGroup] {
         projects
             .map { ProjectGroup(id: $0.id, name: $0.name, sessions: $0.sessions.sorted(by: stableSessionOrder)) }
             .sorted { lhs, rhs in
-                let (lhsLive, rhsLive) = (lhs.sessions.contains { $0.status.isLive }, rhs.sessions.contains { $0.status.isLive })
-                if lhsLive != rhsLive { return lhsLive }
-                let (lhsStart, rhsStart) = (newestStart(lhs), newestStart(rhs))
-                if lhsStart != rhsStart { return lhsStart > rhsStart }
-                return lhs.id < rhs.id
+                switch lhs.name.localizedStandardCompare(rhs.name) {
+                case .orderedAscending: true
+                case .orderedDescending: false
+                case .orderedSame: lhs.id < rhs.id
+                }
             }
     }
 
     static func stableSessionOrder(_ lhs: SessionInfo, _ rhs: SessionInfo) -> Bool {
-        if lhs.status.isLive != rhs.status.isLive { return lhs.status.isLive }
-        let (lhsStart, rhsStart) = (lhs.startedAt ?? .distantPast, rhs.startedAt ?? .distantPast)
-        if lhsStart != rhsStart { return lhsStart > rhsStart }
+        // An unknown start sorts last, with the sessions that have just appeared.
+        let (lhsStart, rhsStart) = (lhs.startedAt ?? .distantFuture, rhs.startedAt ?? .distantFuture)
+        if lhsStart != rhsStart { return lhsStart < rhsStart }
         return lhs.id < rhs.id
-    }
-
-    private static func newestStart(_ project: ProjectGroup) -> Date {
-        project.sessions.compactMap(\.startedAt).max() ?? .distantPast
     }
 
     /// Case- and diacritic-insensitive match on what a user would remember about a session.

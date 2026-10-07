@@ -17,14 +17,35 @@ import Testing
 
     func ids(_ projects: [ProjectGroup]) -> [[String]] { projects.map { $0.sessions.map(\.id) } }
 
-    @Test func sessionsAreLiveFirstThenNewestStartedFirst() {
+    @Test func sessionsAreOldestStartedFirstWhateverTheirStatus() {
         let project = ProjectGroup(id: "/repo", name: "repo", sessions: [
             session("old-live", .idle, startedMinutesAgo: 300),
             session("new-ended", .ended, startedMinutesAgo: 1),
             session("new-live", .running, startedMinutesAgo: 10),
             session("old-ended", .ended, startedMinutesAgo: 600),
         ])
-        #expect(ids(DashboardFilter.stableOrder([project])) == [["new-live", "old-live", "new-ended", "old-ended"]])
+        #expect(ids(DashboardFilter.stableOrder([project])) == [["old-ended", "old-live", "new-live", "new-ended"]])
+    }
+
+    /// On the two-column graph, a session inserted above the others moves every one of them to the other column.
+    @Test func aNewSessionIsAppendedWithoutMovingTheOthers() {
+        let existing = [session("a", .idle, startedMinutesAgo: 30), session("b", .ended, startedMinutesAgo: 20)]
+        let before = ProjectGroup(id: "/repo", name: "repo", sessions: existing)
+        let after = ProjectGroup(id: "/repo", name: "repo", sessions: [session("new", .running, startedMinutesAgo: 0)] + existing)
+        #expect(ids(DashboardFilter.stableOrder([before])) == [["a", "b"]])
+        #expect(ids(DashboardFilter.stableOrder([after])) == [["a", "b", "new"]])
+    }
+
+    @Test func endingOrResumingASessionMovesNothing() {
+        let before = ProjectGroup(id: "/repo", name: "repo", sessions: [
+            session("a", .running, startedMinutesAgo: 30), session("b", .ended, startedMinutesAgo: 20),
+            session("c", .idle, startedMinutesAgo: 10),
+        ])
+        let after = ProjectGroup(id: "/repo", name: "repo", sessions: [
+            session("a", .ended, startedMinutesAgo: 30), session("b", .running, startedMinutesAgo: 20),
+            session("c", .idle, startedMinutesAgo: 10),
+        ])
+        #expect(ids(DashboardFilter.stableOrder([after])) == ids(DashboardFilter.stableOrder([before])))
     }
 
     /// The bug this order exists for: status flips and new activity used to reshuffle the graph every refresh.
@@ -39,7 +60,7 @@ import Testing
             session("a", .running, startedMinutesAgo: 30, activeMinutesAgo: 0),
             session("b", .idle, startedMinutesAgo: 20, activeMinutesAgo: 9),
         ])
-        #expect(ids(DashboardFilter.stableOrder([before])) == [["c", "b", "a"]])
+        #expect(ids(DashboardFilter.stableOrder([before])) == [["a", "b", "c"]])
         #expect(ids(DashboardFilter.stableOrder([after])) == ids(DashboardFilter.stableOrder([before])))
     }
 
@@ -52,19 +73,19 @@ import Testing
         #expect(ids(DashboardFilter.stableOrder([project])) == [["a", "b", "z"]])
     }
 
-    @Test func projectsAreLiveFirstThenByNewestSessionStart() {
+    /// Projects never move for what their sessions do, including a new session starting in one of them.
+    @Test func projectsAreInNameOrderWhateverTheirSessions() {
         let projects = [
-            ProjectGroup(id: "/ended", name: "ended", sessions: [session("e", .ended, startedMinutesAgo: 1)]),
-            ProjectGroup(id: "/old", name: "old", sessions: [session("o", .needsInput, startedMinutesAgo: 600)]),
-            ProjectGroup(id: "/new", name: "new", sessions: [
-                session("n1", .idle, startedMinutesAgo: 900), session("n2", .ended, startedMinutesAgo: 5),
-            ]),
-            ProjectGroup(id: "/tie", name: "tie", sessions: [session("t", .idle, startedMinutesAgo: 600)]),
+            ProjectGroup(id: "/w/web", name: "web", sessions: [session("w", .running, startedMinutesAgo: 1)]),
+            ProjectGroup(id: "/z/Zeta", name: "Zeta", sessions: [session("z", .needsInput, startedMinutesAgo: 5)]),
+            ProjectGroup(id: "/b/app", name: "app", sessions: [session("b", .ended, startedMinutesAgo: 900)]),
+            ProjectGroup(id: "/a/app", name: "app", sessions: [session("a", .idle, startedMinutesAgo: 10)]),
+            ProjectGroup(id: "/m/mobile", name: "mobile", sessions: [session("m", .ended, startedMinutesAgo: 600)]),
         ]
-        #expect(DashboardFilter.stableOrder(projects).map(\.id) == ["/new", "/old", "/tie", "/ended"])
+        #expect(DashboardFilter.stableOrder(projects).map(\.id) == ["/a/app", "/b/app", "/m/mobile", "/w/web", "/z/Zeta"])
     }
 
-    /// One level up: `/a` becoming the most urgent and most recently active project must not lift it above `/b`.
+    /// One level up: neither project moves when the other becomes the most urgent or most recently active.
     @Test func statusAndActivityChangesDoNotMoveProjects() {
         let before = [
             ProjectGroup(id: "/a", name: "a", sessions: [session("a1", .idle, startedMinutesAgo: 30, activeMinutesAgo: 25)]),
@@ -74,8 +95,8 @@ import Testing
             ProjectGroup(id: "/a", name: "a", sessions: [session("a1", .needsInput, startedMinutesAgo: 30, activeMinutesAgo: 0)]),
             ProjectGroup(id: "/b", name: "b", sessions: [session("b1", .idle, startedMinutesAgo: 20, activeMinutesAgo: 9)]),
         ]
-        #expect(DashboardFilter.stableOrder(before).map(\.id) == ["/b", "/a"])
-        #expect(DashboardFilter.stableOrder(after).map(\.id) == ["/b", "/a"])
+        #expect(DashboardFilter.stableOrder(before).map(\.id) == ["/a", "/b"])
+        #expect(DashboardFilter.stableOrder(after).map(\.id) == ["/a", "/b"])
     }
 
     @Test func emptyInputStaysEmpty() {

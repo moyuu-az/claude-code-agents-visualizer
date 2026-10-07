@@ -382,9 +382,11 @@ private struct AgentNode: View {
                         .font(.caption)
                         .foregroundStyle(agent.status.isActive ? .primary : .secondary)
                         .lineLimit(1)
-                    if let activity = agent.activity {
-                        ShimmerText(text: activity)
-                            .accessibilityRepresentation { Text(verbatim: activity) }
+                    // Kept while the agent runs, empty between tool calls: a line that came and went with every tool
+                    // call would resize the card and push the agent stacks below it around.
+                    if agent.status.isActive {
+                        ShimmerText(text: agent.activity ?? "")
+                            .accessibilityRepresentation { Text(verbatim: agent.activity ?? "") }
                     }
                 }
             }
