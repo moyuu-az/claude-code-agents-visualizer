@@ -22,7 +22,7 @@ struct GraphPage: View {
                     } else {
                         // Same shared clock as the dashboard, so relative times tick together.
                         TimelineView(.periodic(from: .now, by: 30)) { context in
-                            GraphCanvas(projects: projects)
+                            GraphCanvas(projects: DashboardFilter.stableOrder(projects))
                                 .environment(\.dashboardClock, context.date)
                         }
                     }
@@ -58,25 +58,33 @@ private extension View {
     }
 }
 
-/// Three columns: projects, their sessions, and each session's agents. Nodes report their frames through anchor
-/// preferences; the edges are drawn behind them from those frames.
+/// Per project: the project node, its sessions in two staggered columns (`GraphRowLayout`) and each session's agents.
+/// Nodes report their frames through anchor preferences; the edges are drawn behind them from those frames.
 private struct GraphCanvas: View {
     let projects: [ProjectGroup]
     // `@State` is a compiler macro in the macOS 27 SDK (see AgentList); a stored `State` value builds everywhere.
     private let expandedState = State(initialValue: Set<String>())
 
-    static let columnGap: CGFloat = 84
+    static let geometry = GraphRowLayout(projectWidth: 210, session: CGSize(width: 260, height: 104), columnGap: 56,
+                                         zigzagGap: 20, rowGap: 12, agentGap: 14)
     static let finishedShown = 2
 
     var body: some View {
         VStack(alignment: .leading, spacing: 26) {
             ForEach(projects) { project in
-                HStack(alignment: .center, spacing: Self.columnGap) {
+                GraphRow(geometry: Self.geometry) {
                     ProjectNode(project: project)
                         .graphNode(.project(project.id))
-                    VStack(alignment: .leading, spacing: 16) {
-                        ForEach(project.sessions) { session in
-                            sessionBranch(session)
+                        .layoutValue(key: GraphSlot.self, value: .project)
+                    ForEach(Array(project.sessions.enumerated()), id: \.element.id) { index, session in
+                        SessionNode(session: session)
+                            .frame(width: Self.geometry.session.width, height: Self.geometry.session.height)
+                            .graphNode(.session(session.id))
+                            .layoutValue(key: GraphSlot.self, value: .session(index))
+                        let (visible, hidden) = agentsToShow(session)
+                        if !visible.isEmpty || hidden > 0 {
+                            agentStack(session, visible: visible, hidden: hidden)
+                                .layoutValue(key: GraphSlot.self, value: .agents(index))
                         }
                     }
                 }
@@ -88,30 +96,22 @@ private struct GraphCanvas: View {
                 GraphEdgesView(edges: edges(anchors.mapValues { proxy[$0] }))
             }
         }
-        .animation(.spring(response: 0.5, dampingFraction: 0.78), value: structure)
+        // No bounce: overshooting nodes are exactly the kind of motion that makes the graph hard to follow.
+        .animation(.smooth(duration: 0.45), value: structure)
     }
 
-    private func sessionBranch(_ session: SessionInfo) -> some View {
-        let (visible, hidden) = agentsToShow(session)
-        return HStack(alignment: .center, spacing: Self.columnGap) {
-            SessionNode(session: session)
-                .graphNode(.session(session.id))
-            if !visible.isEmpty || hidden > 0 {
-                VStack(alignment: .leading, spacing: 10) {
-                    ForEach(visible) { agent in
-                        AgentNode(session: session, agent: agent)
-                            .graphNode(.agent(session: session.id, agent: agent.id))
-                            .transition(.asymmetric(
-                                insertion: .scale(scale: 0.5, anchor: .leading).combined(with: .opacity),
-                                removal: .opacity))
-                    }
-                    if hidden > 0 {
-                        MoreAgentsChip(count: hidden, expanded: expandedState.wrappedValue.contains(session.id)) {
-                            expandedState.wrappedValue.formSymmetricDifference([session.id])
-                        }
-                        .graphNode(.more(session: session.id))
-                    }
+    private func agentStack(_ session: SessionInfo, visible: [AgentInfo], hidden: Int) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(visible) { agent in
+                AgentNode(session: session, agent: agent)
+                    .graphNode(.agent(session: session.id, agent: agent.id))
+                    .transition(.opacity)
+            }
+            if hidden > 0 {
+                MoreAgentsChip(count: hidden, expanded: expandedState.wrappedValue.contains(session.id)) {
+                    expandedState.wrappedValue.formSymmetricDifference([session.id])
                 }
+                .graphNode(.more(session: session.id))
             }
         }
     }
@@ -135,25 +135,32 @@ private struct GraphCanvas: View {
         }
     }
 
+    /// Edges bend only in the gap right after the project or right before the agents, and run straight elsewhere: an
+    /// edge to a second-column session crosses the first column, and one from a first-column session crosses the
+    /// second, both at the session's height, which `GraphRowLayout` keeps clear of cards.
     private func edges(_ frames: [GraphNode: CGRect]) -> [GraphEdge] {
+        let gap = Self.geometry.columnGap
         var edges: [GraphEdge] = []
         for project in projects {
             guard let projectFrame = frames[.project(project.id)] else { continue }
+            let toSessions = projectFrame.maxX...(projectFrame.maxX + gap)
             for session in project.sessions {
                 guard let sessionFrame = frames[.session(session.id)] else { continue }
                 edges.append(GraphEdge(
                     id: "p-\(session.id)", from: projectFrame.trailingCenter, to: sessionFrame.leadingCenter,
-                    color: session.status == .ended ? .secondary : session.status.color,
+                    bend: toSessions, color: session.status == .ended ? .secondary : session.status.color,
                     flow: Self.flow(for: session.status)))
                 for agent in session.agents {
                     guard let agentFrame = frames[.agent(session: session.id, agent: agent.id)] else { continue }
                     edges.append(GraphEdge(
                         id: "a-\(session.id)-\(agent.id)", from: sessionFrame.trailingCenter, to: agentFrame.leadingCenter,
+                        bend: (agentFrame.minX - gap)...agentFrame.minX,
                         color: agent.typeColor, flow: agent.status.isActive ? .active : .faded))
                 }
                 if let moreFrame = frames[.more(session: session.id)] {
                     edges.append(GraphEdge(id: "m-\(session.id)", from: sessionFrame.trailingCenter,
-                                           to: moreFrame.leadingCenter, color: .secondary, flow: .faded))
+                                           to: moreFrame.leadingCenter, bend: (moreFrame.minX - gap)...moreFrame.minX,
+                                           color: .secondary, flow: .faded))
                 }
             }
         }
@@ -172,6 +179,51 @@ private struct GraphCanvas: View {
 private extension CGRect {
     var leadingCenter: CGPoint { CGPoint(x: minX, y: midY) }
     var trailingCenter: CGPoint { CGPoint(x: maxX, y: midY) }
+}
+
+private enum GraphRowSlot {
+    case project, session(Int), agents(Int)
+}
+
+private struct GraphSlot: LayoutValueKey {
+    static let defaultValue = GraphRowSlot.project
+}
+
+/// Places one project's nodes, each tagged with its `GraphSlot`, at the frames `GraphRowLayout` computes.
+private struct GraphRow: Layout {
+    let geometry: GraphRowLayout
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        frames(subviews).size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let frames = frames(subviews)
+        for subview in subviews {
+            let frame: CGRect? = switch subview[GraphSlot.self] {
+            case .project: frames.project
+            case .session(let index): frames.sessions[index]
+            case .agents(let index): frames.agents[index]
+            }
+            guard let frame else { continue }
+            subview.place(at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
+                          proposal: ProposedViewSize(frame.size))
+        }
+    }
+
+    private func frames(_ subviews: Subviews) -> GraphRowLayout.Frames {
+        var projectHeight: CGFloat = 0
+        var sessionCount = 0
+        var stacks: [Int: CGSize] = [:]
+        for subview in subviews {
+            switch subview[GraphSlot.self] {
+            case .project: projectHeight = subview.sizeThatFits(.unspecified).height
+            case .session(let index): sessionCount = max(sessionCount, index + 1)
+            case .agents(let index): stacks[index] = subview.sizeThatFits(.unspecified)
+            }
+        }
+        return geometry.frames(projectHeight: projectHeight, agentStacks: (0..<sessionCount).map { stacks[$0] })
+    }
 }
 
 // MARK: - Nodes
@@ -217,7 +269,7 @@ private struct ProjectNode: View {
             .foregroundStyle(.secondary)
         }
         .padding(14)
-        .frame(width: 210, alignment: .leading)
+        .frame(width: GraphCanvas.geometry.projectWidth, alignment: .leading)
         .glassSurface(RoundedRectangle(cornerRadius: 20, style: .continuous),
                       tint: top == .needsInput ? Color.orange.opacity(0.14) : nil)
         .help(Text(verbatim: project.path))
@@ -255,7 +307,7 @@ private struct SessionNode: View {
                 }
                 if session.status == .needsInput {
                     Label {
-                        Text(verbatim: SessionRow.waitingDescription(session.waitingFor))
+                        Text(verbatim: SessionRow.waitingDescription(session.waitingFor)).lineLimit(1)
                     } icon: {
                         AnimatedSymbol(systemName: "hand.raised.fill", color: .orange, pointSize: 10, motion: .wiggle)
                     }
@@ -267,7 +319,8 @@ private struct SessionNode: View {
                 }
             }
             .padding(12)
-            .frame(width: 290, alignment: .leading)
+            // Fixed size, set by GraphCanvas: a card that grew with its status would push the whole graph around.
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background {
                 switch session.status {
                 case .needsInput: BreathingFill(color: Color.orange.opacity(0.22), cornerRadius: 18)
@@ -329,15 +382,18 @@ private struct AgentNode: View {
                         .font(.caption)
                         .foregroundStyle(agent.status.isActive ? .primary : .secondary)
                         .lineLimit(1)
-                    if let activity = agent.activity {
-                        ShimmerText(text: activity)
-                            .accessibilityRepresentation { Text(verbatim: activity) }
+                    // Kept while the agent runs, empty between tool calls: a line that came and went with every tool
+                    // call would resize the card and push the agent stacks below it around.
+                    if agent.status.isActive {
+                        ShimmerText(text: agent.activity ?? "")
+                            .accessibilityRepresentation { Text(verbatim: agent.activity ?? "") }
+                            .accessibilityHidden(agent.activity == nil)
                     }
                 }
             }
             .padding(.horizontal, 11)
             .padding(.vertical, 8)
-            .frame(width: 270, alignment: .leading)
+            .frame(width: 250, alignment: .leading)
             .background {
                 if agent.status.isActive { BreathingFill(color: agent.typeColor.opacity(0.16), cornerRadius: 14) }
             }

@@ -31,6 +31,32 @@ public enum DashboardFilter {
         }
     }
 
+    /// Order for the graph page, where nodes have to stay put to be followed: projects by name, sessions oldest started
+    /// first. Status, activity and sessions ending never move anything, and a new session goes to the end: on the
+    /// two-column graph, one inserted at the top would move every other session to the other column. The snapshot's
+    /// urgency order follows status and last activity, which change every few seconds.
+    public static func stableOrder(_ projects: [ProjectGroup]) -> [ProjectGroup] {
+        projects
+            // A fixed starting order, not the snapshot's: `localizedStandardCompare` is not transitive for names with
+            // ignorable characters such as a zero-width space, and sorting such a cycle depends on the input order.
+            .sorted { $0.id < $1.id }
+            .map { ProjectGroup(id: $0.id, name: $0.name, sessions: $0.sessions.sorted(by: stableSessionOrder)) }
+            .sorted { lhs, rhs in
+                switch lhs.name.localizedStandardCompare(rhs.name) {
+                case .orderedAscending: true
+                case .orderedDescending: false
+                case .orderedSame: lhs.id < rhs.id
+                }
+            }
+    }
+
+    static func stableSessionOrder(_ lhs: SessionInfo, _ rhs: SessionInfo) -> Bool {
+        // An unknown start sorts last, with the sessions that have just appeared.
+        let (lhsStart, rhsStart) = (lhs.startedAt ?? .distantFuture, rhs.startedAt ?? .distantFuture)
+        if lhsStart != rhsStart { return lhsStart < rhsStart }
+        return lhs.id < rhs.id
+    }
+
     /// Case- and diacritic-insensitive match on what a user would remember about a session.
     static func matches(_ session: SessionInfo, in project: ProjectGroup, query: String) -> Bool {
         let fields: [String?] = [session.title, project.name, session.cwd, session.branch, session.worktreeName]
