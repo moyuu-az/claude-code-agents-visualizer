@@ -138,6 +138,14 @@ final class DesktopUnreadStore {
             let unreadIds: [String]
             /// Marked unread by hand; Claude keeps these even while the session is open.
             let explicitUnreadIds: [String]?
+
+            enum CodingKeys: String, CodingKey { case unreadIds, explicitUnreadIds }
+
+            init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                unreadIds = try c.decode([String].self, forKey: .unreadIds)
+                explicitUnreadIds = c.lenient([String].self, .explicitUnreadIds)  // drift here must not hide unreadIds
+            }
         }
         let state: State
     }

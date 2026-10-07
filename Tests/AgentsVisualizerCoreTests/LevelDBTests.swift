@@ -358,8 +358,14 @@ private struct SplitMix64: RandomNumberGenerator {
         #expect(store().load().isEmpty)
     }
 
-    @Test func toleratesMissingExplicitList() throws {
-        try write("000003.log", LevelDBFile.log([(1, [.put(unreadKey, LevelDBFile.latin1(#"{"state":{"unreadIds":["local_a"]}}"#))])]))
+    /// The hand-marked list is secondary: if its shape drifts, the regular unread list must still be read.
+    @Test(arguments: [
+        #"{"state":{"unreadIds":["local_a"]}}"#, #"{"state":{"unreadIds":["local_a"],"explicitUnreadIds":null}}"#,
+        #"{"state":{"unreadIds":["local_a"],"explicitUnreadIds":"local_b"}}"#,
+        #"{"state":{"unreadIds":["local_a"],"explicitUnreadIds":[1]}}"#,
+    ])
+    func toleratesMissingOrMalformedExplicitList(value: String) throws {
+        try write("000003.log", LevelDBFile.log([(1, [.put(unreadKey, LevelDBFile.latin1(value))])]))
         #expect(store().load() == ["local_a"])
     }
 
