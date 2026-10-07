@@ -20,6 +20,8 @@ Each release on GitHub uses its section below as release notes.
 - **Menu bar panel**: wider (440 pt), the counters at the top are four equal tiles with the label under the number
   instead of capsules cut off at the edge, and the session list is as tall as its rows (up to 480 pt) instead of
   stopping after a row and a half.
+- **SSH sessions** no longer offer *Open Folder in Finder*: their folder is on the remote host, and the same path
+  on this Mac is a different checkout. *Reveal Transcript in Finder* stays (the transcript is mirrored locally).
 
 ### 日本語
 
@@ -32,6 +34,9 @@ Each release on GitHub uses its section below as release notes.
 - **メニューバーのパネル**: 幅を 440 pt に広げました。上部の件数は、端で切れていたカプセルをやめ、数値の下に
   ラベルを置いた同じ幅のタイル 4 枚にしました。セッション一覧は 1 行半で切れず、行数に合わせた高さ
   （最大 480 pt）で表示します。
+- **SSH セッション**: 「フォルダを Finder で開く」を出さないようにしました。フォルダはリモートのホストにあり、
+  この Mac の同じパスは別のチェックアウトです。トランスクリプトはローカルにミラーされているため、
+  「トランスクリプトを Finder で表示」は残します。
 
 ## [0.1.0] - 2026-10-07
 
