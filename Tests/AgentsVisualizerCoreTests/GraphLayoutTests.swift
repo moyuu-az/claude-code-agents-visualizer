@@ -301,9 +301,19 @@ import Testing
         #expect(GraphRowLayout.twoLineName(name) == expected)
     }
 
-    /// Nothing to break at, or only at the very end: the text view wraps it as best it can.
-    @Test(arguments: ["Scratch", "議事録アプリ", "trailing-", "", "-"])
+    /// Nothing to break at, or only at the very start or end: the text view wraps it as best it can. A break after a
+    /// leading separator would leave it alone on the first line and truncate the rest of the name on the second.
+    @Test(arguments: ["Scratch", "議事録アプリ", "trailing-", "", "-", "--", "_averyveryverylongprojectname", ".dotfiles"])
     func namesWithoutAnInnerSeparatorStayAsTheyAre(name: String) {
         #expect(GraphRowLayout.twoLineName(name) == name)
+    }
+
+    @Test(arguments: [
+        ("_my-project", "_my-\nproject"),
+        ("議事録-アプリ-サーバー", "議事録-\nアプリ-サーバー"),
+        ("a-b", "a-\nb"),
+    ])
+    func leadingSeparatorsAndNonLatinNamesBreakAtAnInnerSeparator(name: String, expected: String) {
+        #expect(GraphRowLayout.twoLineName(name) == expected)
     }
 }

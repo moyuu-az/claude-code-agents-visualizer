@@ -109,9 +109,10 @@ public struct GraphRowLayout: Sendable {
 
     /// `name` broken after the separator nearest its middle, for a project node too narrow for it on one line. Left
     /// to itself, the Japanese line breaker splits `claude-code-agents-visualizer` inside a word, even with zero-width
-    /// spaces after the hyphens.
+    /// spaces after the hyphens. A leading separator (`.dotfiles`, `_scratch`) is not a break: it would sit alone on
+    /// the first line.
     public static func twoLineName(_ name: String) -> String {
-        let breaks = name.indices.filter { "-_. ".contains(name[$0]) }.map { name.index(after: $0) }
+        let breaks = name.indices.dropFirst().filter { "-_. ".contains(name[$0]) }.map { name.index(after: $0) }
         let middle = name.count / 2
         func distance(_ index: String.Index) -> Int { abs(name.distance(from: name.startIndex, to: index) - middle) }
         guard let at = breaks.min(by: { distance($0) < distance($1) }), at < name.endIndex else { return name }
