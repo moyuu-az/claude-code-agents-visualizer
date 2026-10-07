@@ -256,9 +256,21 @@ import Testing
         #expect(sessions.count == 1)
         let session = try #require(sessions.first)
         #expect(session.isUnread)
-        // The most recently active record still supplies the title and the deep link.
+        // The most recently active record still supplies the title; the link opens the record whose dot it clears.
         #expect(session.title == "New")
-        #expect(session.desktopSessionId == "local_new")
+        #expect(session.desktopSessionId == "local_old")
+
+        // While busy, or once read, the link goes back to the most recently active record.
+        try register(pid: 7, session: uuidA, cwd: repo, status: "busy")
+        let busy = try #require(build(alive: [7]).allSessions.first)
+        #expect(!busy.isUnread)
+        #expect(busy.desktopSessionId == "local_new")
+        try Data(LevelDBFile.log([(2, [.put(LevelDBFile.localStorageKey("epitaxy-unread-v1"), LevelDBFile.latin1(
+            LevelDBFile.unreadValue([])))])]))
+            .write(to: fixture.url("Library/Application Support/Claude/Local Storage/leveldb/000004.log"))
+        let read = try #require(build(alive: []).allSessions.first)
+        #expect(!read.isUnread)
+        #expect(read.desktopSessionId == "local_new")
     }
 
     /// Among several records for one CLI session, only the most recently active one says whether it was dismissed.
