@@ -6,6 +6,14 @@ Each release on GitHub uses its section below as release notes.
 
 ## [Unreleased]
 
+### Changed
+
+- **Agent graph**: nodes keep their place. Projects and sessions are ordered live first, then newest started first,
+  so a status change or new activity no longer reshuffles the graph; only a session starting or ending moves
+  anything. Session cards have a fixed size and transitions no longer bounce.
+- **Agent graph**: sessions sit in two staggered columns, the second half a row lower, so a project takes about half
+  the height. Edges run through the gaps between cards instead of under them.
+
 ### Fixed
 
 - **Menu bar panel**: wider (440 pt), the counters at the top are four equal tiles with the label under the number
@@ -14,6 +22,11 @@ Each release on GitHub uses its section below as release notes.
 
 ### 日本語
 
+- **エージェントグラフ**: ノードの位置を固定しました。プロジェクトとセッションは「ライブ中 → 開始が新しい順」に
+  並べるので、状態の変化や新しいアクティビティで並びが入れ替わらなくなりました。動くのはセッションの開始・
+  終了時だけです。セッションのカードは固定サイズにし、アニメーションの跳ね返りもなくしました。
+- **エージェントグラフ**: セッションを 2 列に並べ、右列を半段ずらしました（ジャバラ配置）。プロジェクトの高さは
+  ほぼ半分になります。線はカードの下をくぐらず、カードのすき間を通ります。
 - **メニューバーのパネル**: 幅を 440 pt に広げました。上部の件数は、端で切れていたカプセルをやめ、数値の下に
   ラベルを置いた同じ幅のタイル 4 枚にしました。セッション一覧は 1 行半で切れず、行数に合わせた高さ
   （最大 480 pt）で表示します。
