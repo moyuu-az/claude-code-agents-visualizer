@@ -5,10 +5,10 @@ import Testing
 func makeSession(
     id: String = "4b8a9872-18af-4471-b2cf-eb5301cdaff3", desktopId: String? = nil, title: String = "Session",
     status: SessionStatus = .idle, cwd: String = "/repo", branch: String? = nil, worktree: String? = nil,
-    lastActivityAt: Date? = nil, agents: [AgentInfo] = [], isUnread: Bool = false
+    lastActivityAt: Date? = nil, agents: [AgentInfo] = [], surface: SessionSurface = .desktop, isUnread: Bool = false
 ) -> SessionInfo {
     SessionInfo(
-        id: id, desktopSessionId: desktopId, title: title, status: status, waitingFor: nil, surface: .desktop,
+        id: id, desktopSessionId: desktopId, title: title, status: status, waitingFor: nil, surface: surface,
         sshHost: nil, cwd: cwd, worktreeName: worktree, branch: branch, pid: nil, startedAt: nil,
         lastActivityAt: lastActivityAt, activity: nil, agents: agents, pullRequests: [], transcriptPath: nil,
         isUnread: isUnread)
@@ -120,5 +120,17 @@ func makeSession(
     @Test func searchWithoutMatchesIsEmpty() {
         let projects = [project([makeSession(title: "Fix login")])]
         #expect(DashboardFilter.apply(to: projects, scope: .all, query: "payments", now: now).isEmpty)
+    }
+}
+
+@Suite struct SessionInfoTests {
+    @Test(arguments: [SessionSurface.desktop, .terminal, .vscode, .background])
+    func localSessionsRunInAFolderOnThisMac(surface: SessionSurface) {
+        #expect(makeSession(cwd: "/Users/me/repo", surface: surface).localCwd == "/Users/me/repo")
+    }
+
+    /// The same path often exists on this Mac too, but it is another machine's checkout: never treat it as local.
+    @Test func sshSessionsHaveNoLocalFolder() {
+        #expect(makeSession(cwd: "/Users/me/repo", surface: .ssh).localCwd == nil)
     }
 }

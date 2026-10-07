@@ -260,7 +260,10 @@ struct SessionMenu: View {
         }
         Button("Copy Session ID") { model.copyToPasteboard(session.id) }
         Divider()
-        Button("Open Folder in Finder") { model.revealInFinder(path: session.cwd) }
+        if let folder = session.localCwd {
+            Button("Open Folder in Finder") { model.revealInFinder(path: folder) }
+        }
+        // SSH sessions too: their transcript is Claude for Mac's local mirror under `~/.claude/projects/`.
         if let transcript = session.transcriptPath {
             Button("Reveal Transcript in Finder") { model.revealInFinder(path: transcript) }
         }
