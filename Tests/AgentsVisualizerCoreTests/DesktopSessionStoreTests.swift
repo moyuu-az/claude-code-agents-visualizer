@@ -62,11 +62,11 @@ import Testing
         try writeSession("local_drift", ["cliSessionId": "drift", "sshReattach": ["midTurn": "yes"]])
         try writeSession("local_broken", ["cliSessionId": "broken", "sshReattach": "x"])
         let records = DesktopSessionStore(root: fixture.desktopDirectory).load()
-        #expect(records["busy"]?.sshMidTurn == true)
-        #expect(records["done"]?.sshMidTurn == false)
-        #expect(records["local"]?.sshMidTurn == nil)
-        #expect(records["drift"]?.sshMidTurn == nil)
-        #expect(records["broken"]?.sshMidTurn == nil)
+        #expect(records["busy"]?.first?.sshMidTurn == true)
+        #expect(records["done"]?.first?.sshMidTurn == false)
+        #expect(records["local"]?.first?.sshMidTurn == nil)
+        #expect(records["drift"]?.first?.sshMidTurn == nil)
+        #expect(records["broken"]?.first?.sshMidTurn == nil)
     }
 
     @Test func readsEveryAccountAndOrganisation() throws {
