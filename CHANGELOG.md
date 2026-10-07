@@ -23,6 +23,8 @@ Each release on GitHub uses its section below as release notes.
 - **SSH sessions** show as running while Claude for Mac reports their remote turn in progress, instead of as ended
   because the local copy of their transcript lags behind. They open only in Claude for Mac: no `claude --resume`
   command is offered for them.
+- **SSH sessions** no longer offer *Open Folder in Finder*: their folder is on the remote host, and the same path
+  on this Mac is a different checkout. *Reveal Transcript in Finder* stays (the transcript is mirrored locally).
 
 ### 日本語
 
@@ -38,6 +40,9 @@ Each release on GitHub uses its section below as release notes.
 - **SSH セッション**: Claude for Mac がリモートのターンを実行中と記録している間は「実行中」と表示します。これまでは
   ローカルにミラーされたトランスクリプトの遅れで「終了」になっていました。開くときは Claude for Mac だけで開き、
   `claude --resume` コマンドは出しません。
+- **SSH セッション**: 「フォルダを Finder で開く」を出さないようにしました。フォルダはリモートのホストにあり、
+  この Mac の同じパスは別のチェックアウトです。トランスクリプトはローカルにミラーされているため、
+  「トランスクリプトを Finder で表示」は残します。
 
 ## [0.1.0] - 2026-10-07
 

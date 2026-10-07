@@ -121,3 +121,15 @@ func makeSession(
         #expect(DashboardFilter.apply(to: projects, scope: .all, query: "payments", now: now).isEmpty)
     }
 }
+
+@Suite struct SessionInfoTests {
+    @Test(arguments: [SessionSurface.desktop, .terminal, .vscode, .background])
+    func localSessionsRunInAFolderOnThisMac(surface: SessionSurface) {
+        #expect(makeSession(cwd: "/Users/me/repo", surface: surface).localCwd == "/Users/me/repo")
+    }
+
+    /// The same path often exists on this Mac too, but it is another machine's checkout: never treat it as local.
+    @Test func sshSessionsHaveNoLocalFolder() {
+        #expect(makeSession(cwd: "/Users/me/repo", surface: .ssh).localCwd == nil)
+    }
+}
