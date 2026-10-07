@@ -1,0 +1,56 @@
+name: Release
+
+# Push a tag `v<version>` matching CFBundleShortVersionString in Resources/Info.plist, with a matching
+# `## [<version>]` section in CHANGELOG.md. The workflow tests, builds a universal app, packages the .dmg and
+# .zip, and publishes a GitHub release whose notes are that CHANGELOG section.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write  # create the release and upload its assets
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    # The Liquid Glass APIs need the macOS 26 SDK.
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false  # the release is created with GH_TOKEN below, not with git
+      - name: Check version and release notes
+        run: |
+          version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)"
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match Info.plist version $version"
+            exit 1
+          fi
+          mkdir -p build
+          awk -v v="$version" '/^## \[/ { found = index($0, "[" v "]") > 0; next } /^\[[^]]+\]: / { next } found' \
+            CHANGELOG.md > build/release-notes.md
+          if ! grep -q '[^[:space:]]' build/release-notes.md; then
+            echo "::error::CHANGELOG.md has no section for $version"
+            exit 1
+          fi
+      - name: Test
+        run: scripts/test.sh
+      - name: Package (universal)
+        run: UNIVERSAL=1 scripts/package.sh
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          gh release create "$GITHUB_REF_NAME" \
+            "build/ClaudeCodeAgentsVisualizer-${version}.dmg" \
+            "build/ClaudeCodeAgentsVisualizer-${version}.zip" \
+            build/SHA256SUMS.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Claude Code Agents Visualizer ${version}" \
+            --notes-file build/release-notes.md \
+            --verify-tag

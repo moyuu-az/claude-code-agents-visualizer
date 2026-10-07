@@ -119,7 +119,8 @@ import Testing
     @Test func defaultsToTheStandardLocations() {
         let env = ClaudeEnvironment.from(environment: [:])
         let home = FileManager.default.homeDirectoryForCurrentUser
-        #expect(env.claudeDirectory.standardizedFileURL == home.appending(path: ".claude").standardizedFileURL)
+        // Compare paths, not URLs: directory URLs differ by a trailing slash depending on the Foundation version.
+        #expect(env.claudeDirectory.path == home.appending(path: ".claude").path)
         #expect(env.desktopSessionsDirectory.path.hasSuffix("Library/Application Support/Claude/claude-code-sessions"))
     }
 

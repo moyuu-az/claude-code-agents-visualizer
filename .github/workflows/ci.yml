@@ -25,12 +25,13 @@ jobs:
         run: swift --version
       - name: Test
         run: scripts/test.sh
-      - name: Build app (universal)
-        run: UNIVERSAL=1 scripts/build-app.sh
-      - name: Package
-        run: ditto -c -k --keepParent "build/Claude Code Agents Visualizer.app" "build/ClaudeCodeAgentsVisualizer.zip"
+      - name: Package (universal .dmg and .zip)
+        run: UNIVERSAL=1 scripts/package.sh
       - uses: actions/upload-artifact@v7
         with:
           name: app
-          path: build/ClaudeCodeAgentsVisualizer.zip
+          path: |
+            build/ClaudeCodeAgentsVisualizer-*.dmg
+            build/ClaudeCodeAgentsVisualizer-*.zip
+            build/SHA256SUMS.txt
           if-no-files-found: error
