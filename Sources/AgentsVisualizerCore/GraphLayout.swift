@@ -43,7 +43,7 @@ public struct GraphRowLayout: Sendable {
     /// (`(session.height + rowGap) / 2`), or every session's agent line pushes the next one down and a project with
     /// many agents grows tall again.
     public static let standard = GraphRowLayout(
-        projectWidth: 176, session: CGSize(width: 250, height: 78), agent: CGSize(width: 232, height: 36),
+        projectWidth: 176, session: CGSize(width: 250, height: 80), agent: CGSize(width: 232, height: 36),
         columnGap: 40, zigzagGap: 14, rowGap: 10, agentGap: 6, toggleWidth: 40)
 
     public struct Frames: Equatable, Sendable {

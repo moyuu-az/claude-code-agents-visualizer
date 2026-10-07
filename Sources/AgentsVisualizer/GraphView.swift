@@ -253,19 +253,14 @@ private struct ProjectNode: View {
                 }
                 .frame(width: 28, height: 28)
                 .glassSurface(Circle(), tint: top == .ended ? nil : top.color.opacity(0.22))
-                ForEach([SessionStatus.needsInput, .running, .idle, .ended], id: \.self) { status in
-                    let count = project.sessions.count { $0.status == status }
-                    if count > 0 {
-                        HStack(spacing: 3) {
-                            Circle().fill(status == .ended ? Color.secondary.opacity(0.5) : status.color).frame(width: 6, height: 6)
-                            Text(count, format: .number).font(.caption2.monospacedDigit())
-                        }
-                        .help(Text(status.label))
+                // Every status plus running agents, with two-digit counts, is wider than the node: the agent count
+                // then moves under the status counts instead of truncating a number.
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) { statusCounts; agentCount }
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 8) { statusCounts }
+                        agentCount
                     }
-                }
-                let agents = project.sessions.reduce(0) { $0 + $1.runningAgentCount }
-                if agents > 0 {
-                    Label("\(agents)", systemImage: "person.2.fill").font(.caption2).foregroundStyle(.teal)
                 }
             }
             .foregroundStyle(.secondary)
@@ -284,6 +279,26 @@ private struct ProjectNode: View {
         .glassSurface(RoundedRectangle(cornerRadius: 16, style: .continuous),
                       tint: top == .needsInput ? Color.orange.opacity(0.14) : nil)
         .help(Text(verbatim: project.path))
+    }
+
+    @ViewBuilder private var statusCounts: some View {
+        ForEach([SessionStatus.needsInput, .running, .idle, .ended], id: \.self) { status in
+            let count = project.sessions.count { $0.status == status }
+            if count > 0 {
+                HStack(spacing: 3) {
+                    Circle().fill(status == .ended ? Color.secondary.opacity(0.5) : status.color).frame(width: 6, height: 6)
+                    Text(count, format: .number).font(.caption2.monospacedDigit())
+                }
+                .help(Text(status.label))
+            }
+        }
+    }
+
+    @ViewBuilder private var agentCount: some View {
+        let agents = project.sessions.reduce(0) { $0 + $1.runningAgentCount }
+        if agents > 0 {
+            Label("\(agents)", systemImage: "person.2.fill").font(.caption2).foregroundStyle(.teal)
+        }
     }
 }
 
