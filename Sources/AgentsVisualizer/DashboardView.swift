@@ -108,16 +108,27 @@ extension SessionInfo {
 /// Global counters: the "how is everything going" answer before reading any card.
 struct SummaryStrip: View {
     let snapshot: DashboardSnapshot
+    /// Equal-width tiles with the label under the number, for the menu bar panel: four capsules do not fit its
+    /// width, so the labels were cut down to one character and the numbers clipped.
+    var compact = false
 
     var body: some View {
         let agents = snapshot.allSessions.reduce(0) { $0 + $1.runningAgentCount }
         GlassGroup(spacing: 12) {
-            HStack(spacing: 10) {
+            HStack(spacing: compact ? 8 : 10) {
                 ForEach([SessionStatus.needsInput, .running, .idle], id: \.self) { status in
-                    Counter(value: snapshot.count(status), label: Text(status.label), color: status.color, symbol: status.symbol)
+                    Counter(value: snapshot.count(status), label: Text(status.label), color: status.color,
+                            symbol: status.symbol, compact: compact)
                 }
-                Counter(value: agents, label: Text("Agents running"), color: .teal, symbol: "person.2.fill")
-                Spacer(minLength: 0)
+                let agentsCounter = Counter(value: agents, label: compact ? Text("Agents") : Text("Agents running"),
+                                            color: .teal, symbol: "person.2.fill", compact: compact)
+                if compact {
+                    // The short tile label drops "running"; VoiceOver keeps it.
+                    agentsCounter.accessibilityLabel(Text("Agents running: \(agents)"))
+                } else {
+                    agentsCounter
+                    Spacer(minLength: 0)
+                }
             }
         }
     }
@@ -127,27 +138,55 @@ struct SummaryStrip: View {
         let label: Text
         let color: Color
         let symbol: String
+        let compact: Bool
 
         var body: some View {
-            HStack(alignment: .center, spacing: 8) {
-                Image(systemName: symbol)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(value > 0 ? color : .secondary)
-                    .symbolEffect(.bounce, value: value)
-                    .accessibilityHidden(true)
-                Text(value, format: .number)
-                    .font(.system(.title2, design: .rounded).weight(.bold))
-                    .foregroundStyle(value > 0 ? color : .secondary)
-                    .contentTransition(.numericText(value: Double(value)))
-                label
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+            let tint = value > 0 ? color.opacity(0.22) : nil
+            Group {
+                if compact {
+                    VStack(spacing: 2) {
+                        HStack(spacing: 5) {
+                            icon(size: 11)
+                            number(.title3)
+                        }
+                        label
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .glassSurface(RoundedRectangle(cornerRadius: 14, style: .continuous), tint: tint)
+                } else {
+                    HStack(alignment: .center, spacing: 8) {
+                        icon(size: 13)
+                        number(.title2)
+                        label
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .glassSurface(Capsule(), tint: tint)
+                }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .glassSurface(Capsule(), tint: value > 0 ? color.opacity(0.22) : nil)
             .animation(.snappy, value: value)
             .accessibilityElement(children: .combine)
+        }
+
+        private func icon(size: CGFloat) -> some View {
+            Image(systemName: symbol)
+                .font(.system(size: size, weight: .semibold))
+                .foregroundStyle(value > 0 ? color : .secondary)
+                .symbolEffect(.bounce, value: value)
+                .accessibilityHidden(true)
+        }
+
+        private func number(_ style: Font.TextStyle) -> some View {
+            Text(value, format: .number)
+                .font(.system(style, design: .rounded).weight(.bold))
+                .foregroundStyle(value > 0 ? color : .secondary)
+                .contentTransition(.numericText(value: Double(value)))
         }
     }
 }
