@@ -64,6 +64,20 @@ import Testing
         #expect(DashboardFilter.stableOrder(projects).map(\.id) == ["/new", "/old", "/tie", "/ended"])
     }
 
+    /// One level up: `/a` becoming the most urgent and most recently active project must not lift it above `/b`.
+    @Test func statusAndActivityChangesDoNotMoveProjects() {
+        let before = [
+            ProjectGroup(id: "/a", name: "a", sessions: [session("a1", .idle, startedMinutesAgo: 30, activeMinutesAgo: 25)]),
+            ProjectGroup(id: "/b", name: "b", sessions: [session("b1", .running, startedMinutesAgo: 20, activeMinutesAgo: 0)]),
+        ]
+        let after = [
+            ProjectGroup(id: "/a", name: "a", sessions: [session("a1", .needsInput, startedMinutesAgo: 30, activeMinutesAgo: 0)]),
+            ProjectGroup(id: "/b", name: "b", sessions: [session("b1", .idle, startedMinutesAgo: 20, activeMinutesAgo: 9)]),
+        ]
+        #expect(DashboardFilter.stableOrder(before).map(\.id) == ["/b", "/a"])
+        #expect(DashboardFilter.stableOrder(after).map(\.id) == ["/b", "/a"])
+    }
+
     @Test func emptyInputStaysEmpty() {
         #expect(DashboardFilter.stableOrder([]).isEmpty)
     }
@@ -128,15 +142,16 @@ import Testing
         #expect(frames.size.height == 300)
     }
 
-    /// Agents start and finish all the time; the sessions and the project must not move when they do.
-    @Test(arguments: [
+    /// Agents start and finish all the time; the sessions and the project must not move when they do. 400 is taller
+    /// than the four sessions, so the sessions are offset to centre on the project and a tall stack starts above them.
+    @Test(arguments: [80, 400] as [CGFloat], [
         [nil, nil, nil, nil],
         [CGSize(width: 250, height: 300), nil, CGSize(width: 250, height: 60), nil],
         [CGSize(width: 250, height: 40), CGSize(width: 250, height: 500), CGSize(width: 250, height: 40), CGSize(width: 250, height: 40)],
     ] as [[CGSize?]])
-    func agentStacksNeverMoveSessionsOrTheProject(stacks: [CGSize?]) {
-        let bare = layout.frames(projectHeight: 80, agentStacks: [nil, nil, nil, nil])
-        let busy = layout.frames(projectHeight: 80, agentStacks: stacks)
+    func agentStacksNeverMoveSessionsOrTheProject(projectHeight: CGFloat, stacks: [CGSize?]) {
+        let bare = layout.frames(projectHeight: projectHeight, agentStacks: [nil, nil, nil, nil])
+        let busy = layout.frames(projectHeight: projectHeight, agentStacks: stacks)
         #expect(busy.sessions == bare.sessions)
         #expect(busy.project == bare.project)
     }

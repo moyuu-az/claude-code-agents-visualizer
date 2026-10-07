@@ -135,8 +135,9 @@ private struct GraphCanvas: View {
         }
     }
 
-    /// Edges bend only in the gap between two columns and run straight elsewhere: an edge to or from the first session
-    /// column crosses the second one at the session's height, which `GraphRowLayout` keeps clear of cards.
+    /// Edges bend only in the gap right after the project or right before the agents, and run straight elsewhere: an
+    /// edge to a second-column session crosses the first column, and one from a first-column session crosses the
+    /// second, both at the session's height, which `GraphRowLayout` keeps clear of cards.
     private func edges(_ frames: [GraphNode: CGRect]) -> [GraphEdge] {
         let gap = Self.geometry.columnGap
         var edges: [GraphEdge] = []
@@ -268,7 +269,7 @@ private struct ProjectNode: View {
             .foregroundStyle(.secondary)
         }
         .padding(14)
-        .frame(width: 210, alignment: .leading)
+        .frame(width: GraphCanvas.geometry.projectWidth, alignment: .leading)
         .glassSurface(RoundedRectangle(cornerRadius: 20, style: .continuous),
                       tint: top == .needsInput ? Color.orange.opacity(0.14) : nil)
         .help(Text(verbatim: project.path))

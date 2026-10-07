@@ -53,8 +53,8 @@ public struct GraphRowLayout: Sendable {
                    size: session)
         }
         // Each stack is centred on its session unless the previous stack is in the way, then it is pushed down. Stacks
-        // never start above the first session: centring a tall one there would move every session of the project each
-        // time an agent starts or finishes.
+        // never start above the top of the row: centring a tall one higher would move every session of the project
+        // each time an agent starts or finishes.
         // ponytail: greedy, so one tall stack pushes every later one below its session; fine for the few sessions
         // that have agents at once. Balance the drift up and down if graphs with many busy sessions look skewed.
         var nextFreeY: CGFloat = 0
