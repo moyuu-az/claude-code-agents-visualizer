@@ -33,8 +33,8 @@ import Testing
         try fixture.writeJSON("\(desktopBase)/\(id).json", object)
     }
 
-    private func build(alive: Set<Int32>) -> DashboardSnapshot {
-        SnapshotBuilder(environment: fixture.environment(alive: alive)).build(now: now)
+    private func build(alive: Set<Int32>, desktopRunning: Bool = true) -> DashboardSnapshot {
+        SnapshotBuilder(environment: fixture.environment(alive: alive, desktopRunning: desktopRunning)).build(now: now)
     }
 
     @Test func mergesSourcesIntoProjectsWithStatusesAndAgents() throws {
@@ -171,6 +171,46 @@ import Testing
         #expect(byTitle["Remote stale"]?.status == .ended)
         #expect(byTitle["Remote done"]?.status == .ended)
         #expect(byTitle.values.allSatisfy { $0.surface == .ssh && $0.sshHost == "box" })
+    }
+
+    /// Claude for Mac mirrors an SSH transcript only now and then (seen in the wild: the mirror ended 11 minutes before
+    /// the turn in progress started), so the app's own record of the remote turn decides while it holds the connection.
+    @Test func sshSessionFollowsClaudeForMacsRecordOfTheRemoteTurn() throws {
+        let cwd = fixture.url("remote/app").path
+        let mirrorWritten = now.addingTimeInterval(-1800)
+        let turnStarted = Date(timeIntervalSince1970: (now.timeIntervalSince1970 - 600).rounded())  // survives ms storage
+        func remote(_ desktopId: String, _ id: String, midTurn: Bool, mirror: [[String: Any]]) throws {
+            try desktopSession(desktopId, cli: id, [
+                "title": desktopId, "cwd": cwd, "sshConfig": ["sshHost": "pro"],
+                "lastActivityAt": turnStarted.timeIntervalSince1970 * 1000, "sshReattach": ["midTurn": midTurn],
+            ])
+            try transcript("ssh-\(id)", id, mirror)
+        }
+        try remote("local_busy", uuidA, midTurn: true, mirror: [
+            Line.user("go", at: mirrorWritten, cwd: cwd), Line.assistantText("ok", at: mirrorWritten),
+        ])
+        try remote("local_stale", uuidB, midTurn: true, mirror: [
+            Line.user("go", at: mirrorWritten, cwd: cwd),
+            Line.assistantTool("Bash", input: ["command": "make"], at: mirrorWritten),
+        ])
+        // The app saw the turn finish; a mirror caught mid-turn must not override it.
+        try remote("local_done", uuidC, midTurn: false, mirror: [
+            Line.user("go", cwd: cwd), Line.assistantTool("Bash", input: ["command": "make"], at: now),
+        ])
+
+        let sessions = Dictionary(uniqueKeysWithValues: build(alive: []).allSessions.map { ($0.title, $0) })
+        let busy = try #require(sessions["local_busy"])
+        #expect(busy.status == .running)
+        #expect(busy.lastActivityAt == turnStarted)
+        #expect(SessionScope.live.includes(busy, now: now))
+        #expect(sessions["local_stale"]?.status == .running)
+        #expect(sessions["local_stale"]?.activity == nil)  // that tool call belongs to an older turn
+        #expect(sessions["local_done"]?.status == .ended)
+
+        // Without Claude for Mac nothing on this Mac drives the remote turn, and its record can no longer change.
+        let quit = build(alive: [], desktopRunning: false).allSessions
+        #expect(quit.count == 3)
+        #expect(quit.allSatisfy { $0.status == .ended })
     }
 
     @Test func relocatedSessionGroupsUnderItsNewFolder() throws {

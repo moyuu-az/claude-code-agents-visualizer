@@ -1,3 +1,4 @@
+import AppKit  // NSRunningApplication only
 import Darwin
 import Foundation
 
@@ -13,15 +14,19 @@ public struct ClaudeEnvironment: Sendable {
     public var homeDirectory: URL
     /// Injected so tests can simulate live and dead processes.
     public var isProcessAlive: @Sendable (_ pid: Int32, _ registeredAt: Date?) -> Bool
+    /// Injected like `isProcessAlive`.
+    public var isDesktopAppRunning: @Sendable () -> Bool
 
     public init(
         claudeDirectory: URL, desktopSessionsDirectory: URL, homeDirectory: URL,
-        isProcessAlive: @escaping @Sendable (Int32, Date?) -> Bool = ProcessProbe.isAlive
+        isProcessAlive: @escaping @Sendable (Int32, Date?) -> Bool = ProcessProbe.isAlive,
+        isDesktopAppRunning: @escaping @Sendable () -> Bool = ProcessProbe.isClaudeDesktopRunning
     ) {
         self.claudeDirectory = claudeDirectory
         self.desktopSessionsDirectory = desktopSessionsDirectory
         self.homeDirectory = homeDirectory
         self.isProcessAlive = isProcessAlive
+        self.isDesktopAppRunning = isDesktopAppRunning
     }
 
     public static var current: ClaudeEnvironment { from(environment: ProcessInfo.processInfo.environment) }
@@ -64,6 +69,12 @@ public enum ProcessProbe {
         let startDate = Date(timeIntervalSince1970: TimeInterval(started.tv_sec) + TimeInterval(started.tv_usec) / 1e6)
         // Small tolerance for clock granularity between the two timestamps.
         return startDate <= registeredAt.addingTimeInterval(2)
+    }
+
+    /// Claude for Mac holds the SSH connections of its remote sessions; while it is not running, nothing on this Mac
+    /// drives them and their records in its session index go stale.
+    public static func isClaudeDesktopRunning() -> Bool {
+        !NSRunningApplication.runningApplications(withBundleIdentifier: "com.anthropic.claudefordesktop").isEmpty
     }
 }
 

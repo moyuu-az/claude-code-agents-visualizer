@@ -55,6 +55,18 @@ func makeSession(
         #expect(ClaudeDeepLink.resumeCommand(for: makeSession(id: id)) == nil)
     }
 
+    /// The conversation lives on the SSH host: Claude for Mac opens it over its own connection, a local CLI cannot.
+    @Test func sshSessionsOpenOnlyInClaudeForMac() {
+        let ssh = SessionInfo(
+            id: "4b8a9872-18af-4471-b2cf-eb5301cdaff3", desktopSessionId: "local_7380e0f6-ae09-4dd9-aaea-2f0769f879a4",
+            title: "Remote", status: .running, waitingFor: nil, surface: .ssh, sshHost: "pro", cwd: "/repo",
+            worktreeName: nil, branch: nil, pid: nil, startedAt: nil, lastActivityAt: nil, activity: nil, agents: [],
+            pullRequests: [], transcriptPath: nil)
+        #expect(ClaudeDeepLink.url(for: ssh)?.absoluteString
+                == "claude://code/continue?session=local_7380e0f6-ae09-4dd9-aaea-2f0769f879a4")
+        #expect(ClaudeDeepLink.resumeCommand(for: ssh) == nil)
+    }
+
     @Test func resumeCommandQuotesThePath() {
         let session = makeSession(cwd: "/Users/me/it's here")
         #expect(ClaudeDeepLink.resumeCommand(for: session)

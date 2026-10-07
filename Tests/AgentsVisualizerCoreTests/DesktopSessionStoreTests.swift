@@ -55,6 +55,20 @@ import Testing
         #expect(record.sshHost == nil)
     }
 
+    @Test func readsWhetherTheRemoteTurnIsInProgress() throws {
+        try writeSession("local_busy", ["cliSessionId": "busy", "sshReattach": ["midTurn": true, "processId": "p1"]])
+        try writeSession("local_done", ["cliSessionId": "done", "sshReattach": ["midTurn": false]])
+        try writeSession("local_local", ["cliSessionId": "local"])
+        try writeSession("local_drift", ["cliSessionId": "drift", "sshReattach": ["midTurn": "yes"]])
+        try writeSession("local_broken", ["cliSessionId": "broken", "sshReattach": "x"])
+        let records = DesktopSessionStore(root: fixture.desktopDirectory).load()
+        #expect(records["busy"]?.sshMidTurn == true)
+        #expect(records["done"]?.sshMidTurn == false)
+        #expect(records["local"]?.sshMidTurn == nil)
+        #expect(records["drift"]?.sshMidTurn == nil)
+        #expect(records["broken"]?.sshMidTurn == nil)
+    }
+
     @Test func readsEveryAccountAndOrganisation() throws {
         try writeSession("local_a", account: "a1", org: "o1", ["cliSessionId": "cli-a"])
         try writeSession("local_b", account: "a2", org: "o2", ["cliSessionId": "cli-b"])

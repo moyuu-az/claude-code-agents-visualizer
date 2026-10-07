@@ -30,8 +30,11 @@ public enum ClaudeDeepLink {
     }
 
     /// Terminal command that resumes the session with the Claude Code CLI.
+    ///
+    /// Not for SSH sessions: the conversation and `cwd` belong to the remote host, so a local CLI would start a
+    /// different session on this Mac. Claude for Mac opens them over its own connection instead.
     public static func resumeCommand(for session: SessionInfo) -> String? {
-        guard session.id.wholeMatch(of: uuidPattern) != nil else { return nil }
+        guard session.surface != .ssh, session.id.wholeMatch(of: uuidPattern) != nil else { return nil }
         return "cd \(shellQuoted(session.cwd)) && claude --resume \(session.id)"
     }
 
