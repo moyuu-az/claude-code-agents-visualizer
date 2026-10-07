@@ -102,7 +102,7 @@ extension AgentInfo {
 }
 
 extension SessionInfo {
-    var layoutKey: String { ([id, status.rawValue] + agents.map(\.layoutKey)).joined(separator: " ") }
+    var layoutKey: String { ([id, status.rawValue, isUnread ? "unread" : "read"] + agents.map(\.layoutKey)).joined(separator: " ") }
 }
 
 /// Global counters: the "how is everything going" answer before reading any card.
@@ -114,11 +114,17 @@ struct SummaryStrip: View {
 
     var body: some View {
         let agents = snapshot.allSessions.reduce(0) { $0 + $1.runningAgentCount }
+        let unread = snapshot.allSessions.count(where: \.isUnread)
         GlassGroup(spacing: 12) {
             HStack(spacing: compact ? 8 : 10) {
                 ForEach([SessionStatus.needsInput, .running, .idle], id: \.self) { status in
                     Counter(value: snapshot.count(status), label: Text(status.label), color: status.color,
                             symbol: status.symbol, compact: compact)
+                }
+                // Only while there is something to read, so it stands out when it appears.
+                if unread > 0 {
+                    Counter(value: unread, label: Text("Unread"), color: .accentColor, symbol: "circle.fill", compact: compact)
+                        .transition(.scale.combined(with: .opacity))
                 }
                 let agentsCounter = Counter(value: agents, label: compact ? Text("Agents") : Text("Agents running"),
                                             color: .teal, symbol: "person.2.fill", compact: compact)
@@ -130,6 +136,7 @@ struct SummaryStrip: View {
                     Spacer(minLength: 0)
                 }
             }
+            .animation(.snappy, value: unread > 0)
         }
     }
 

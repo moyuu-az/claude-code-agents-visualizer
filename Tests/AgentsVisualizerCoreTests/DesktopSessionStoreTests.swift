@@ -23,7 +23,7 @@ import Testing
             "prs": [["prNumber": 12, "url": "https://github.com/o/r/pull/12", "state": "OPEN"]],
             "remoteMcpServersConfig": [["huge": "payload"]],
         ])
-        let record = try #require(DesktopSessionStore(root: fixture.desktopDirectory).load()["cli-a"])
+        let record = try #require(DesktopSessionStore(root: fixture.desktopDirectory).load()["cli-a"]?.first)
         #expect(record.sessionId == "local_a")
         #expect(record.title == "Fix login")
         #expect(record.cwd == "/repo")
@@ -42,13 +42,13 @@ import Testing
             ["prNumber": 3, "url": "https://github.com/o/r/pull/3"],
             ["url": "https://github.com/o/r/pull/4"],
         ]])
-        let record = try #require(DesktopSessionStore(root: fixture.desktopDirectory).load()["cli-a"])
+        let record = try #require(DesktopSessionStore(root: fixture.desktopDirectory).load()["cli-a"]?.first)
         #expect(record.pullRequests.map(\.number) == [3])
     }
 
     @Test func toleratesSchemaDrift() throws {
         try writeSession("local_a", ["cliSessionId": "cli-a", "title": 123, "isArchived": "yes", "prs": "none", "sshConfig": 1])
-        let record = try #require(DesktopSessionStore(root: fixture.desktopDirectory).load()["cli-a"])
+        let record = try #require(DesktopSessionStore(root: fixture.desktopDirectory).load()["cli-a"]?.first)
         #expect(record.title == nil)
         #expect(record.isArchived == false)
         #expect(record.pullRequests.isEmpty)
@@ -88,19 +88,23 @@ import Testing
         #expect(DesktopSessionStore(root: fixture.url("missing")).load().isEmpty)
     }
 
-    @Test func duplicateCliIdKeepsMostRecentActivity() throws {
-        try writeSession("local_old", ["cliSessionId": "cli", "title": "Old", "lastActivityAt": 1_791_000_000_000])
-        try writeSession("local_new", ["cliSessionId": "cli", "title": "New", "lastActivityAt": 1_791_000_001_000])
-        #expect(DesktopSessionStore(root: fixture.desktopDirectory).load()["cli"]?.title == "New")
+    /// Claude can keep several records for one CLI session (e.g. continued twice); none may be dropped.
+    @Test func duplicateCliIdKeepsEveryRecordMostRecentFirst() throws {
+        try writeSession("local_a", ["cliSessionId": "cli", "title": "Undated"])
+        try writeSession("local_b", ["cliSessionId": "cli", "title": "Old", "lastActivityAt": 1_791_000_000_000])
+        try writeSession("local_c", ["cliSessionId": "cli", "title": "New", "lastActivityAt": 1_791_000_002_000])
+        try writeSession("local_d", ["cliSessionId": "cli", "title": "Mid", "lastActivityAt": 1_791_000_001_000])
+        #expect(DesktopSessionStore(root: fixture.desktopDirectory).load()["cli"]?.map(\.title)
+            == ["New", "Mid", "Old", "Undated"])
     }
 
     @Test func picksUpEditsAndDeletionsAcrossRefreshes() throws {
         let store = DesktopSessionStore(root: fixture.desktopDirectory)
         let url = try writeSession("local_a", ["cliSessionId": "cli-a", "title": "Before"])
-        #expect(store.load()["cli-a"]?.title == "Before")
+        #expect(store.load()["cli-a"]?.first?.title == "Before")
         // Different size guarantees a new stamp even within the same mtime second.
         try writeSession("local_a", ["cliSessionId": "cli-a", "title": "After the rename"])
-        #expect(store.load()["cli-a"]?.title == "After the rename")
+        #expect(store.load()["cli-a"]?.first?.title == "After the rename")
         try FileManager.default.removeItem(at: url)
         #expect(store.load().isEmpty)
     }

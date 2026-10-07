@@ -285,6 +285,8 @@ private struct SessionNode: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .top, spacing: 8) {
                     StatusGlyph(status: session.status)
+                    // Unread sessions show in every time range; without the dot an ended one would look misplaced.
+                    if session.isUnread { UnreadDot().padding(.top, 4) }
                     Text(verbatim: session.title)
                         .font(.callout.weight(.semibold))
                         .foregroundStyle(session.status == .ended ? .secondary : .primary)

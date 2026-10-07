@@ -110,12 +110,16 @@ public struct SessionInfo: Identifiable, Sendable, Hashable, Codable {
     public let model: String?
     /// Reasoning effort chosen in Claude for Mac (`low` … `xhigh`), when known.
     public let effort: String?
+    /// Finished (or ended) with a reply you have not opened yet in Claude for Mac. Always `false` for sessions
+    /// Claude for Mac does not track (terminal, IDE).
+    public let isUnread: Bool
 
     public init(
         id: String, desktopSessionId: String?, title: String, status: SessionStatus, waitingFor: String?,
         surface: SessionSurface, sshHost: String?, cwd: String, worktreeName: String?, branch: String?,
         pid: Int32?, startedAt: Date?, lastActivityAt: Date?, activity: String?, agents: [AgentInfo],
-        pullRequests: [PullRequestRef], transcriptPath: String?, model: String? = nil, effort: String? = nil
+        pullRequests: [PullRequestRef], transcriptPath: String?, model: String? = nil, effort: String? = nil,
+        isUnread: Bool = false
     ) {
         self.id = id
         self.desktopSessionId = desktopSessionId
@@ -136,6 +140,7 @@ public struct SessionInfo: Identifiable, Sendable, Hashable, Codable {
         self.transcriptPath = transcriptPath
         self.model = model
         self.effort = effort
+        self.isUnread = isUnread
     }
 
     public var runningAgentCount: Int { agents.count { $0.status.isActive } }

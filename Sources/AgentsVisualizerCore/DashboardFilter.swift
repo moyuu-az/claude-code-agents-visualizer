@@ -1,13 +1,13 @@
 import Foundation
 
-/// Which sessions the dashboard shows. Live sessions are always shown; the scope only limits ended ones.
+/// Which sessions the dashboard shows. Live and unread sessions are always shown; the scope only limits the rest.
 public enum SessionScope: String, CaseIterable, Identifiable, Sendable {
     case live, day, week, all
 
     public var id: String { rawValue }
 
     public func includes(_ session: SessionInfo, now: Date) -> Bool {
-        if session.status.isLive { return true }
+        if session.status.isLive || session.isUnread { return true }
         let window: TimeInterval
         switch self {
         case .live: return false

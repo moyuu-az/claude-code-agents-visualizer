@@ -289,6 +289,91 @@ import Testing
         #expect(byTitle["No transcript"]?.model == "claude-fable-5-1")
     }
 
+    /// Claude for Mac's sidebar unread list marks finished sessions; busy or blocked ones already demand attention.
+    @Test func finishedSessionsInClaudesUnreadListAreUnread() throws {
+        let repo = fixture.url("code/app").path
+        try fixture.makeDirectory("code/app/.git")
+        let cases: [(id: String, desktop: String, pid: Int32?, status: String)] = [
+            (uuidA, "local_idle", 1, "idle"), (uuidB, "local_busy", 2, "busy"), (uuidC, "local_wait", 3, "waiting"),
+            (uuidD, "local_ended", nil, ""),
+        ]
+        for item in cases {
+            try desktopSession(item.desktop, cli: item.id, ["title": item.desktop, "cwd": repo])
+            try transcript("-code-app", item.id, [Line.user("go", cwd: repo), Line.assistantText("done")])
+            if let pid = item.pid { try register(pid: pid, session: item.id, cwd: repo, status: item.status) }
+        }
+        let read = "eeeeeeee-0000-4000-8000-000000000005"
+        try desktopSession("local_read", cli: read, ["title": "local_read", "cwd": repo])
+        try register(pid: 4, session: read, cwd: repo, status: "idle")
+        let cli = "ffffffff-0000-4000-8000-000000000006"  // not a Claude for Mac session: never unread
+        try register(pid: 5, session: cli, cwd: repo, status: "idle", extra: ["entrypoint": "cli"])
+        try transcript("-code-app", cli, [Line.user("go", cwd: repo, extra: ["customTitle": "cli"]), Line.assistantText("done")])
+        let hosted = "99999999-0000-4000-8000-000000000007"  // not in the session index yet: only the registry links it
+        try register(pid: 6, session: hosted, cwd: repo, status: "idle", extra: ["hostSessionId": "local_hosted"])
+
+        try fixture.makeDirectory("Library/Application Support/Claude/Local Storage/leveldb")
+        try Data(LevelDBFile.log([(1, [.put(LevelDBFile.localStorageKey("epitaxy-unread-v1"), LevelDBFile.latin1(
+            LevelDBFile.unreadValue(["local_idle", "local_busy", "local_wait", "local_ended", cli, "local_hosted"])))])]))
+            .write(to: fixture.url("Library/Application Support/Claude/Local Storage/leveldb/000003.log"))
+
+        let sessions = Dictionary(uniqueKeysWithValues: build(alive: [1, 2, 3, 4, 5, 6]).allSessions.map { ($0.id, $0) })
+        #expect(sessions[uuidA]?.isUnread == true)
+        #expect(sessions[uuidD]?.isUnread == true)
+        #expect(sessions[uuidB]?.isUnread == false)
+        #expect(sessions[uuidC]?.isUnread == false)
+        #expect(sessions[read]?.isUnread == false)
+        #expect(sessions[cli]?.isUnread == false)
+        #expect(sessions[hosted]?.isUnread == true)
+    }
+
+    /// Claude can keep two records for one CLI session (e.g. continued twice); its dot may sit on the older one.
+    @Test func unreadOnAnyDesktopRecordOfTheSessionCounts() throws {
+        let repo = fixture.url("code/app").path
+        try fixture.makeDirectory("code/app/.git")
+        try desktopSession("local_old", cli: uuidA,
+                           ["title": "Old", "cwd": repo, "lastActivityAt": (now.timeIntervalSince1970 - 600) * 1000])
+        try desktopSession("local_new", cli: uuidA,
+                           ["title": "New", "cwd": repo, "lastActivityAt": now.timeIntervalSince1970 * 1000])
+        try fixture.makeDirectory("Library/Application Support/Claude/Local Storage/leveldb")
+        try Data(LevelDBFile.log([(1, [.put(LevelDBFile.localStorageKey("epitaxy-unread-v1"), LevelDBFile.latin1(
+            LevelDBFile.unreadValue(["local_old"])))])]))
+            .write(to: fixture.url("Library/Application Support/Claude/Local Storage/leveldb/000003.log"))
+
+        let sessions = build(alive: []).allSessions
+        #expect(sessions.count == 1)
+        let session = try #require(sessions.first)
+        #expect(session.isUnread)
+        // The most recently active record still supplies the title; the link opens the record whose dot it clears.
+        #expect(session.title == "New")
+        #expect(session.desktopSessionId == "local_old")
+
+        // While busy, or once read, the link goes back to the most recently active record.
+        try register(pid: 7, session: uuidA, cwd: repo, status: "busy")
+        let busy = try #require(build(alive: [7]).allSessions.first)
+        #expect(!busy.isUnread)
+        #expect(busy.desktopSessionId == "local_new")
+        try Data(LevelDBFile.log([(2, [.put(LevelDBFile.localStorageKey("epitaxy-unread-v1"), LevelDBFile.latin1(
+            LevelDBFile.unreadValue([])))])]))
+            .write(to: fixture.url("Library/Application Support/Claude/Local Storage/leveldb/000004.log"))
+        let read = try #require(build(alive: []).allSessions.first)
+        #expect(!read.isUnread)
+        #expect(read.desktopSessionId == "local_new")
+    }
+
+    /// Among several records for one CLI session, only the most recently active one says whether it was dismissed.
+    @Test func mostRecentDesktopRecordDecidesWhetherArchived() throws {
+        let repo = fixture.url("code/app").path
+        try fixture.makeDirectory("code/app/.git")
+        let earlier = (now.timeIntervalSince1970 - 600) * 1000, later = now.timeIntervalSince1970 * 1000
+        try desktopSession("local_a_old", cli: uuidA, ["title": "Dismissed earlier", "isArchived": true, "cwd": repo,
+                                                       "lastActivityAt": earlier])
+        try desktopSession("local_a_new", cli: uuidA, ["title": "Continued", "cwd": repo, "lastActivityAt": later])
+        try desktopSession("local_b_old", cli: uuidB, ["title": "Older copy", "cwd": repo, "lastActivityAt": earlier])
+        try desktopSession("local_b_new", cli: uuidB, ["title": "Dismissed now", "isArchived": true, "cwd": repo,
+                                                       "lastActivityAt": later])
+        #expect(build(alive: []).allSessions.map(\.title) == ["Continued"])
+    }
+
     @Test func reportsMissingClaudeDirectory() {
         let snapshot = build(alive: [])
         #expect(snapshot.issues == [.claudeDirectoryMissing(path: fixture.claudeDirectory.path)])
@@ -319,5 +404,13 @@ import Testing
         let second = try #require(builder.build(now: now).allSessions.first)
         #expect(second.status == .idle)
         #expect(second.activity == nil)
+        #expect(!second.isUnread)
+
+        try fixture.makeDirectory("Library/Application Support/Claude/Local Storage/leveldb")
+        try Data(LevelDBFile.log([(1, [.put(LevelDBFile.localStorageKey("epitaxy-unread-v1"), LevelDBFile.latin1(
+            LevelDBFile.unreadValue(["local_a"])))])]))
+            .write(to: fixture.url("Library/Application Support/Claude/Local Storage/leveldb/000003.log"))
+        try desktopSession("local_a", cli: uuidA, ["cwd": repo])
+        #expect(builder.build(now: now).allSessions.first?.isUnread == true)
     }
 }

@@ -22,7 +22,7 @@ struct MenuBarLabel: View {
     }
 }
 
-/// Compact list of live sessions, most urgent first.
+/// Compact list of live and unread sessions, most urgent first.
 struct MenuBarPanel: View {
     @Environment(DashboardModel.self) private var model
     @Environment(\.openWindow) private var openWindow
@@ -34,7 +34,7 @@ struct MenuBarPanel: View {
 
     var body: some View {
         let live = model.snapshot.projects.flatMap { project in
-            project.sessions.filter(\.status.isLive).map { (project, $0) }
+            project.sessions.filter { $0.status.isLive || $0.isUnread }.map { (project, $0) }
         }
         .sorted { SnapshotOrdering.urgentFirst($0.1, $1.1) }
 
@@ -61,7 +61,10 @@ struct MenuBarPanel: View {
                                 HStack(spacing: 8) {
                                     StatusGlyph(status: session.status, size: 11)
                                     VStack(alignment: .leading, spacing: 1) {
-                                        Text(verbatim: session.title).lineLimit(1)
+                                        HStack(alignment: .firstTextBaseline, spacing: 5) {
+                                            if session.isUnread { UnreadDot() }
+                                            Text(verbatim: session.title).lineLimit(1)
+                                        }
                                         Text(verbatim: project.name).font(.caption).foregroundStyle(.secondary)
                                     }
                                     Spacer(minLength: 6)

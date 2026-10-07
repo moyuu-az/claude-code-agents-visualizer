@@ -6,6 +6,12 @@ Each release on GitHub uses its section below as release notes.
 
 ## [Unreleased]
 
+### Added
+
+- **Unread sessions**: sessions that finished while you were looking elsewhere get the same unread dot as in
+  Claude for Mac's sidebar, and an *Unread* counter appears at the top. They show in every time range and in the
+  menu bar until you open them in Claude for Mac. The list is read from Claude for Mac's Local Storage.
+
 ### Changed
 
 - **Agent graph**: nodes keep their place. Projects are in name order and sessions oldest started first, with new
@@ -17,7 +23,7 @@ Each release on GitHub uses its section below as release notes.
 
 ### Fixed
 
-- **Menu bar panel**: wider (440 pt), the counters at the top are four equal tiles with the label under the number
+- **Menu bar panel**: wider (440 pt), the counters at the top are equal-width tiles with the label under the number
   instead of capsules cut off at the edge, and the session list is as tall as its rows (up to 480 pt) instead of
   stopping after a row and a half.
 - **SSH sessions** show as running while Claude for Mac reports their remote turn in progress, instead of as ended
@@ -28,6 +34,9 @@ Each release on GitHub uses its section below as release notes.
 
 ### 日本語
 
+- **未読のセッション**: 別の画面を見ている間に完了したセッションに、Claude for Mac のサイドバーと同じ未読の
+  ドットを付け、上部に「未読」の件数を表示します。Claude for Mac で開くまで、表示範囲に関係なく一覧と
+  メニューバーに表示します。未読の一覧は Claude for Mac の Local Storage から読みます。
 - **エージェントグラフ**: ノードの位置を固定しました。プロジェクトは名前順、セッションは開始の古い順に並べ、
   新しいセッションは末尾に追加します。状態の変化、新しいアクティビティ、セッションの終了で並びが入れ替わる
   ことはなくなりました。セッションのカードは固定サイズにし、実行中のエージェントはツール呼び出しの合間も
@@ -35,7 +44,7 @@ Each release on GitHub uses its section below as release notes.
 - **エージェントグラフ**: セッションを 2 列に並べ、右列を半段ずらしました（ジャバラ配置）。プロジェクトの高さは
   ほぼ半分になります。線はカードの下をくぐらず、カードのすき間を通ります。
 - **メニューバーのパネル**: 幅を 440 pt に広げました。上部の件数は、端で切れていたカプセルをやめ、数値の下に
-  ラベルを置いた同じ幅のタイル 4 枚にしました。セッション一覧は 1 行半で切れず、行数に合わせた高さ
+  ラベルを置いた同じ幅のタイルにしました。セッション一覧は 1 行半で切れず、行数に合わせた高さ
   （最大 480 pt）で表示します。
 - **SSH セッション**: Claude for Mac がリモートのターンを実行中と記録している間は「実行中」と表示します。これまでは
   ローカルにミラーされたトランスクリプトの遅れで「終了」になっていました。開くときは Claude for Mac だけで開き、

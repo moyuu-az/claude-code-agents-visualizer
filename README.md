@@ -27,6 +27,10 @@ What was I doing in the other repo?"* This app answers that at a glance.
   | **Running** | A turn is in progress. The tool currently in use is shown (e.g. `Bash · Run the tests`). |
   | **Done** | The process is alive and the last turn finished; it waits for your next prompt. |
   | **Ended** | No live process holds the session. |
+- **Unread sessions**: a session that finished while you were looking elsewhere gets a dot, the same one as in
+  Claude for Mac's sidebar, and an *Unread* counter appears at the top. Unread sessions show in every time range
+  and in the menu bar until you open them in Claude for Mac. Sessions started in a terminal or IDE are never
+  marked unread: Claude for Mac does not track them.
 - **Subagents of live sessions** as a tree under the session: type, description, live stopwatch, what the agent is
   doing right now, and how it ended (completed / failed / stopped / interrupted). Running agents orbit their
   session; dashes flow from the session to each working agent.
@@ -37,7 +41,7 @@ What was I doing in the other repo?"* This app answers that at a glance.
   in name order, sessions oldest first with new ones added at the end. ⌘1 returns to the card dashboard.
 - **One click to open** the session in Claude for Mac. Sessions started in a terminal or IDE are imported into
   Claude for Mac after a confirmation (or copy the `claude --resume` command instead).
-- **Menu bar extra** with the number of sessions that need you, and a compact list of live sessions.
+- **Menu bar extra** with the number of sessions that need you, and a compact list of live and unread sessions.
 - Liquid Glass design on macOS 26, light and dark mode, English and Japanese, Reduce Motion respected.
 - Filters (live / 24 hours / 7 days / all) and search across titles, projects, paths, branches and agents.
 
@@ -76,12 +80,13 @@ open "build/Claude Code Agents Visualizer.app"
 
 ## How it works
 
-The app is **read-only** and makes **no network requests**. Every 2 seconds it reads three local sources:
+The app is **read-only** and makes **no network requests**. Every 2 seconds it reads four local sources:
 
 | Source | Used for |
 | --- | --- |
 | `~/.claude/sessions/<pid>.json` | Which sessions have a live process and their status (`busy` / `waiting` / `idle`). A PID only counts if its process started before the session registered (the `startedAt` Claude Code records), so a recycled PID does not make a dead session look live. |
 | `~/Library/Application Support/Claude/claude-code-sessions/…` | Claude for Mac's session list: titles, desktop ids for deep links, archived flags, pull requests. |
+| `~/Library/Application Support/Claude/Local Storage/leveldb/` | Claude for Mac's unread sessions (the `epitaxy-unread-v1` entry of its Local Storage, a LevelDB database). Only that entry is decoded; the files are read without locking and never written, and a file changed mid-read is picked up on the next refresh. |
 | `~/.claude/projects/<project>/<session>.jsonl` | Everything else: working directory, branch, first prompt, the tool in flight, subagents (`<session>/subagents/`). Session details come from the first and last 512 KB of a transcript. To track subagents, the transcript of a live session that has any is also scanned once for `<task-notification>` entries (in 8 MB chunks), then only the bytes appended since. Unchanged files are not re-read. |
 
 Subagents are listed for live sessions only. One counts as finished when its own transcript ends with a final

@@ -5,12 +5,13 @@ import Testing
 func makeSession(
     id: String = "4b8a9872-18af-4471-b2cf-eb5301cdaff3", desktopId: String? = nil, title: String = "Session",
     status: SessionStatus = .idle, cwd: String = "/repo", branch: String? = nil, worktree: String? = nil,
-    lastActivityAt: Date? = nil, agents: [AgentInfo] = [], surface: SessionSurface = .desktop
+    lastActivityAt: Date? = nil, agents: [AgentInfo] = [], surface: SessionSurface = .desktop, isUnread: Bool = false
 ) -> SessionInfo {
     SessionInfo(
         id: id, desktopSessionId: desktopId, title: title, status: status, waitingFor: nil, surface: surface,
         sshHost: nil, cwd: cwd, worktreeName: worktree, branch: branch, pid: nil, startedAt: nil,
-        lastActivityAt: lastActivityAt, activity: nil, agents: agents, pullRequests: [], transcriptPath: nil)
+        lastActivityAt: lastActivityAt, activity: nil, agents: agents, pullRequests: [], transcriptPath: nil,
+        isUnread: isUnread)
 }
 
 @Suite struct ClaudeDeepLinkTests {
@@ -97,6 +98,14 @@ func makeSession(
             makeSession(status: .ended, lastActivityAt: nil),
         ]
         #expect(sessions.map { scope.includes($0, now: now) } == expected)
+    }
+
+    @Test(arguments: SessionScope.allCases)
+    func unreadSessionsShowInEveryScope(scope: SessionScope) {
+        let old = makeSession(status: .ended, lastActivityAt: now.addingTimeInterval(-90 * 86400), isUnread: true)
+        let undated = makeSession(status: .ended, lastActivityAt: nil, isUnread: true)
+        #expect(scope.includes(old, now: now))
+        #expect(scope.includes(undated, now: now))
     }
 
     @Test func dropsProjectsLeftEmpty() {
