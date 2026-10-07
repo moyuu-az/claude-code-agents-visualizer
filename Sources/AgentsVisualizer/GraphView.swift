@@ -390,11 +390,13 @@ private struct AgentNode: View {
                         }
                     }
                     HStack(spacing: 4) {
+                        // Priority, not fixedSize: plugin agent types (`pr-review-toolkit:silent-failure-hunter`) are
+                        // wider than the card and would draw over the next card in the line.
                         Text(verbatim: agent.agentType)
                             .font(.caption2.weight(.bold))
                             .foregroundStyle(agent.status.isActive ? agent.typeColor : .secondary)
                             .lineLimit(1)
-                            .fixedSize()
+                            .layoutPriority(1)
                         // Kept while the agent runs, empty between tool calls, like the card's size: a line that came
                         // and went with every tool call would flicker the model name in and out.
                         if agent.status.isActive {
