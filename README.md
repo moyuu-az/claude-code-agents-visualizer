@@ -99,7 +99,9 @@ Continuous animations run in Core Animation (the window server), so the app stay
 - The files above are internal to Claude Code and Claude for Mac, not a public API. A future version can change
   them; the app then skips what it cannot read instead of crashing. Please open an issue if something looks off.
 - Sessions running over SSH (Claude for Mac's remote folders) have no local process: they show as running while
-  their mirrored transcript is mid-turn and was written in the last 2 minutes, otherwise as ended.
+  Claude for Mac is open and records their remote turn as in progress, otherwise as ended (*Needs input* and *Done*
+  are not recorded for them). Opening one shows it in Claude for Mac over its own connection; there is no
+  `claude --resume` command for them.
 - Cloud sessions (claude.ai) are not listed.
 
 ### Configuration

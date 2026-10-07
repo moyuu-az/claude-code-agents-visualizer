@@ -33,8 +33,8 @@ import Testing
         try fixture.writeJSON("\(desktopBase)/\(id).json", object)
     }
 
-    private func build(alive: Set<Int32>) -> DashboardSnapshot {
-        SnapshotBuilder(environment: fixture.environment(alive: alive)).build(now: now)
+    private func build(alive: Set<Int32>, desktopRunning: Bool = true) -> DashboardSnapshot {
+        SnapshotBuilder(environment: fixture.environment(alive: alive, desktopRunning: desktopRunning)).build(now: now)
     }
 
     @Test func mergesSourcesIntoProjectsWithStatusesAndAgents() throws {
@@ -171,6 +171,93 @@ import Testing
         #expect(byTitle["Remote stale"]?.status == .ended)
         #expect(byTitle["Remote done"]?.status == .ended)
         #expect(byTitle.values.allSatisfy { $0.surface == .ssh && $0.sshHost == "box" })
+    }
+
+    /// Claude for Mac mirrors an SSH transcript only now and then (seen in the wild: the mirror ended 11 minutes before
+    /// the turn in progress started), so the app's own record of the remote turn decides while it holds the connection.
+    @Test func sshSessionFollowsClaudeForMacsRecordOfTheRemoteTurn() throws {
+        let cwd = fixture.url("remote/app").path
+        let mirrorWritten = now.addingTimeInterval(-1800)
+        let turnStarted = Date(timeIntervalSince1970: (now.timeIntervalSince1970 - 600).rounded())  // survives ms storage
+        func remote(_ desktopId: String, _ id: String, midTurn: Bool, mirror: [[String: Any]]) throws {
+            try desktopSession(desktopId, cli: id, [
+                "title": desktopId, "cwd": cwd, "sshConfig": ["sshHost": "pro"],
+                "lastActivityAt": turnStarted.timeIntervalSince1970 * 1000, "sshReattach": ["midTurn": midTurn],
+            ])
+            try transcript("ssh-\(id)", id, mirror)
+        }
+        try remote("local_busy", uuidA, midTurn: true, mirror: [
+            Line.user("go", at: mirrorWritten, cwd: cwd), Line.assistantText("ok", at: mirrorWritten),
+        ])
+        try remote("local_stale", uuidB, midTurn: true, mirror: [
+            Line.user("go", at: mirrorWritten, cwd: cwd),
+            Line.assistantTool("Bash", input: ["command": "make"], at: mirrorWritten),
+        ])
+        // The app saw the turn finish; a mirror caught mid-turn must not override it.
+        try remote("local_done", uuidC, midTurn: false, mirror: [
+            Line.user("go", cwd: cwd), Line.assistantTool("Bash", input: ["command": "make"], at: now),
+        ])
+        // A mirror that caught up with the running turn shows its tool call, and is newer than the record's turn start.
+        let mirrorFresh = Date(timeIntervalSince1970: now.timeIntervalSince1970.rounded(.down))
+        try remote("local_caught_up", uuidD, midTurn: true, mirror: [
+            Line.user("go", at: mirrorFresh, cwd: cwd),
+            Line.assistantTool("Bash", input: ["command": "make"], at: mirrorFresh),
+        ])
+
+        let sessions = Dictionary(uniqueKeysWithValues: build(alive: []).allSessions.map { ($0.title, $0) })
+        let busy = try #require(sessions["local_busy"])
+        #expect(busy.status == .running)
+        #expect(busy.lastActivityAt == turnStarted)
+        #expect(SessionScope.live.includes(busy, now: now))
+        #expect(sessions["local_stale"]?.status == .running)
+        #expect(sessions["local_stale"]?.activity == nil)  // that tool call belongs to an older turn
+        #expect(sessions["local_done"]?.status == .ended)
+        let caughtUp = try #require(sessions["local_caught_up"])
+        #expect(caughtUp.status == .running)
+        #expect(caughtUp.activity == "Bash · make")
+        #expect(caughtUp.lastActivityAt == mirrorFresh)
+
+        // Without Claude for Mac nothing on this Mac drives the remote turn, and its record can no longer change.
+        let quit = build(alive: [], desktopRunning: false).allSessions
+        #expect(quit.count == 4)
+        #expect(quit.allSatisfy { $0.status == .ended })
+    }
+
+    /// The registry is authoritative whenever a local process exists, also for a remote session.
+    @Test func liveProcessOutranksClaudeForMacsRecordOfARemoteTurn() throws {
+        let cwd = fixture.url("remote/app").path
+        try register(pid: 7, session: uuidA, cwd: cwd, status: "waiting")
+        try desktopSession("local_r", cli: uuidA, [
+            "title": "Remote", "cwd": cwd, "sshConfig": ["sshHost": "pro"], "sshReattach": ["midTurn": true],
+        ])
+        try transcript("ssh-\(uuidA)", uuidA, [Line.user("go", cwd: cwd)])
+
+        let session = try #require(build(alive: [7]).allSessions.first)
+        #expect(session.status == .needsInput)
+        #expect(session.surface == .ssh)
+    }
+
+    /// Claude for Mac bumps `lastActivityAt` when it merely reopens a session (seen in the wild: a conversation idle since
+    /// the day before, bumped by a resume this morning). For local sessions the transcript is the truth.
+    @Test func reopeningALocalSessionInClaudeForMacIsNotActivity() throws {
+        let repo = fixture.url("code/app").path
+        try fixture.makeDirectory("code/app/.git")
+        let talked = Date(timeIntervalSince1970: (now.timeIntervalSince1970 - 2 * 86400).rounded())
+        try desktopSession("local_old", cli: uuidA, [
+            "title": "Old talk", "cwd": repo, "lastActivityAt": (now.timeIntervalSince1970 - 60) * 1000,
+        ])
+        try transcript("-code-app", uuidA, [Line.user("go", at: talked, cwd: repo), Line.assistantText("ok", at: talked)])
+        // Without a transcript, Claude for Mac's timestamp is all there is.
+        let opened = Date(timeIntervalSince1970: (now.timeIntervalSince1970 - 3600).rounded())
+        try desktopSession("local_new", cli: uuidB, [
+            "title": "No prompt yet", "cwd": repo, "lastActivityAt": opened.timeIntervalSince1970 * 1000,
+        ])
+
+        let sessions = Dictionary(uniqueKeysWithValues: build(alive: []).allSessions.map { ($0.title, $0) })
+        let old = try #require(sessions["Old talk"])
+        #expect(old.lastActivityAt == talked)
+        #expect(!SessionScope.day.includes(old, now: now))
+        #expect(sessions["No prompt yet"]?.lastActivityAt == opened)
     }
 
     @Test func relocatedSessionGroupsUnderItsNewFolder() throws {

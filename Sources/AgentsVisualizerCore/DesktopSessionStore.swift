@@ -12,15 +12,20 @@ struct DesktopSessionRecord: Decodable, Sendable, Equatable {
     let lastActivityAt: Date?
     let branch: String?
     let sshHost: String?
+    /// Whether the app last saw the SSH session's remote turn in progress; nil when it does not record it.
+    /// The file is not rewritten while the turn runs, so this and `lastActivityAt` hold from the turn's start.
+    let sshMidTurn: Bool?
     let pullRequests: [PullRequestRef]
     let model: String?
     let effort: String?
 
     enum CodingKeys: String, CodingKey {
-        case sessionId, cliSessionId, cwd, title, isArchived, createdAt, lastActivityAt, branch, sshConfig, prs, model, effort
+        case sessionId, cliSessionId, cwd, title, isArchived, createdAt, lastActivityAt, branch, sshConfig, sshReattach, prs
+        case model, effort
     }
 
     private struct SSHConfig: Decodable { let sshHost: String? }
+    private struct SSHReattach: Decodable { let midTurn: Bool? }
 
     private struct PR: Decodable {
         let prNumber: Int?
@@ -39,6 +44,7 @@ struct DesktopSessionRecord: Decodable, Sendable, Equatable {
         lastActivityAt = Timestamp.fromMilliseconds(c.lenient(Double.self, .lastActivityAt))
         branch = c.lenient(String.self, .branch)
         sshHost = c.lenient(SSHConfig.self, .sshConfig)?.sshHost
+        sshMidTurn = c.lenient(SSHReattach.self, .sshReattach)?.midTurn
         model = c.lenient(String.self, .model)
         effort = c.lenient(String.self, .effort)
         var seen = Set<URL>()

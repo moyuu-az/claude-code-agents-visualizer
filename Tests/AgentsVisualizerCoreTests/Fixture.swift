@@ -52,10 +52,10 @@ final class Fixture {
         try FileManager.default.createDirectory(at: url(relativePath), withIntermediateDirectories: true)
     }
 
-    func environment(alive: Set<Int32> = []) -> ClaudeEnvironment {
+    func environment(alive: Set<Int32> = [], desktopRunning: Bool = true) -> ClaudeEnvironment {
         ClaudeEnvironment(
             claudeDirectory: claudeDirectory, desktopSessionsDirectory: desktopDirectory, homeDirectory: home,
-            isProcessAlive: { pid, _ in alive.contains(pid) })
+            isProcessAlive: { pid, _ in alive.contains(pid) }, isDesktopAppRunning: { desktopRunning })
     }
 
     static func json(_ object: [String: Any]) -> String {

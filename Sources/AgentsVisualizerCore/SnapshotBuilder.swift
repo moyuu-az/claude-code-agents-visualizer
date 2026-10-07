@@ -8,8 +8,8 @@ import Foundation
 ///
 /// Not thread-safe: it owns incremental caches. Drive it from a single actor/queue.
 public final class SnapshotBuilder {
-    /// SSH sessions run on another machine, so there is no local registry entry to read. A mirrored transcript
-    /// that is mid-turn and was written this recently is treated as running.
+    /// SSH sessions run on another machine, so there is no local registry entry to read. Without Claude for Mac's
+    /// record of the remote turn, a mirrored transcript that is mid-turn and was written this recently counts as running.
     static let remoteActivityWindow: TimeInterval = 120
 
     private let environment: ClaudeEnvironment
@@ -69,9 +69,18 @@ public final class SnapshotBuilder {
 
         let isRemote = desktop?.sshHost != nil || transcript.map(Self.isRemoteTranscript) == true
         var status = live?.sessionStatus ?? .ended
-        if live == nil, isRemote, let summary, summary.turnState == .inProgress,
-           let lastActivity = summary.lastActivityAt, now.timeIntervalSince(lastActivity) < Self.remoteActivityWindow {
-            status = .running
+        var activity = summary?.activity
+        if live == nil, isRemote {
+            let mirrorMidTurn = summary.map {
+                $0.turnState == .inProgress
+                    && $0.lastActivityAt.map { now.timeIntervalSince($0) < Self.remoteActivityWindow } == true
+            } == true
+            // Claude for Mac's record of the remote turn wins: the mirror lags it by minutes. The mirror only decides
+            // for sessions the app keeps no such record of.
+            let midTurn = desktop?.sshMidTurn.map { $0 && environment.isDesktopAppRunning() } ?? mirrorMidTurn
+            if midTurn { status = .running }
+            // A stale mirror's last tool call belongs to an earlier turn.
+            if !mirrorMidTurn { activity = nil }
         }
 
         let agents: [AgentInfo]
@@ -95,8 +104,11 @@ public final class SnapshotBuilder {
             branch: desktop?.branch ?? summary?.gitBranch.flatMap { $0 == "HEAD" ? nil : $0 },
             pid: live?.pid,
             startedAt: summary?.startedAt ?? desktop?.createdAt ?? live?.startedAt,
-            lastActivityAt: [summary?.lastActivityAt, live?.statusUpdatedAt].compactMap { $0 }.max() ?? desktop?.lastActivityAt,
-            activity: status == .running ? summary?.activity : nil,
+            // Claude for Mac also bumps its timestamp on merely reopening a session, so it only counts where the
+            // transcript is a lagging mirror.
+            lastActivityAt: [summary?.lastActivityAt, live?.statusUpdatedAt, isRemote ? desktop?.lastActivityAt : nil]
+                .compactMap { $0 }.max() ?? desktop?.lastActivityAt,
+            activity: status == .running ? activity : nil,
             agents: agents,
             pullRequests: desktop?.pullRequests ?? [],
             transcriptPath: transcript?.path,
