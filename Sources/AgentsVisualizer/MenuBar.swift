@@ -27,6 +27,10 @@ struct MenuBarPanel: View {
     @Environment(DashboardModel.self) private var model
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismiss) private var dismiss
+    // The menu bar window does not grow a ScrollView to fit its rows (the list was cut off after a row and a half),
+    // so the rows are measured and the list gets an explicit height. Not `@State`: see AgentList.
+    private let rowsHeightState = State(initialValue: CGFloat(0))
+    private static let maxListHeight: CGFloat = 480
 
     var body: some View {
         let live = model.snapshot.projects.flatMap { project in
@@ -35,7 +39,7 @@ struct MenuBarPanel: View {
         .sorted { SnapshotOrdering.urgentFirst($0.1, $1.1) }
 
         VStack(alignment: .leading, spacing: 0) {
-            SummaryStrip(snapshot: model.snapshot)
+            SummaryStrip(snapshot: model.snapshot, compact: true)
                 .padding(12)
             Divider()
             if live.isEmpty {
@@ -72,8 +76,10 @@ struct MenuBarPanel: View {
                         }
                     }
                     .padding(.vertical, 4)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { rowsHeightState.wrappedValue = $0 }
                 }
-                .frame(maxHeight: 420)
+                .scrollBounceBehavior(.basedOnSize)
+                .frame(height: min(rowsHeightState.wrappedValue, Self.maxListHeight))
             }
             Divider()
             HStack {
@@ -86,7 +92,7 @@ struct MenuBarPanel: View {
             }
             .padding(10)
         }
-        .frame(width: 380)
+        .frame(width: 440)
     }
 
     private func showDashboard() {

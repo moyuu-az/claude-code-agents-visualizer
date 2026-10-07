@@ -4,6 +4,20 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org).
 Each release on GitHub uses its section below as release notes.
 
+## [Unreleased]
+
+### Fixed
+
+- **Menu bar panel**: wider (440 pt), the counters at the top are four equal tiles with the label under the number
+  instead of capsules cut off at the edge, and the session list is as tall as its rows (up to 480 pt) instead of
+  stopping after a row and a half.
+
+### 日本語
+
+- **メニューバーのパネル**: 幅を 440 pt に広げました。上部の件数は、端で切れていたカプセルをやめ、数値の下に
+  ラベルを置いた同じ幅のタイル 4 枚にしました。セッション一覧は 1 行半で切れず、行数に合わせた高さ
+  （最大 480 pt）で表示します。
+
 ## [0.1.0] - 2026-10-07
 
 The first release: every Claude Code session on your Mac, on one screen.
