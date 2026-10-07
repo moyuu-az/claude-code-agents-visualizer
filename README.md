@@ -50,7 +50,14 @@ What was I doing in the other repo?"* This app answers that at a glance.
 
 ## Install
 
-Build from source (no Xcode needed; the Command Line Tools are enough):
+Download the latest `.dmg` (or `.zip`) from [Releases](https://github.com/moyuu-az/claude-code-agents-visualizer/releases)
+and drag the app to Applications. The app is ad-hoc signed and not notarized, so macOS blocks the first launch:
+open **System Settings › Privacy & Security** and click **Open Anyway** (on macOS 14, right-click the app and
+choose **Open** instead). `SHA256SUMS.txt` on each release lets you verify the download.
+
+### Build from source
+
+No Xcode needed; the Command Line Tools are enough (see the requirement on the SDK above).
 
 ```bash
 git clone https://github.com/moyuu-az/claude-code-agents-visualizer.git
@@ -64,9 +71,7 @@ cd claude-code-agents-visualizer && scripts/build-app.sh
 open "build/Claude Code Agents Visualizer.app"
 ```
 
-Move the app to `/Applications` to keep it. Builds from CI (the `app` artifact of each workflow run; downloading
-needs a GitHub account) are ad-hoc signed, not notarized, so macOS blocks the first launch: open **System Settings ›
-Privacy & Security** and click **Open Anyway** (on macOS 14, right-click the app and choose **Open** instead).
+`scripts/package.sh` builds the same `.dmg` and `.zip` as a release (`UNIVERSAL=1` for arm64 + x86_64).
 
 ## How it works
 
@@ -116,7 +121,7 @@ paths).
 Sources/AgentsVisualizerCore   data layer: readers, status logic, deep links (no UI, fully tested)
 Sources/AgentsVisualizer       SwiftUI app: dashboard, menu bar, Core Animation views
 Tests/AgentsVisualizerCoreTests  swift-testing suites with on-disk fixtures
-scripts/                      build-app.sh, test.sh, demo.py, make-icon.swift
+scripts/                      build-app.sh, package.sh, test.sh, demo.py, make-icon.swift
 ```
 
 ```bash

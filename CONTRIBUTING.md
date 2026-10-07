@@ -31,6 +31,15 @@ python3 scripts/demo.py    # run the app against made-up sessions
 - **Screenshots use demo data** (`scripts/demo.py`), never your real sessions.
 - Commits follow [Conventional Commits](https://www.conventionalcommits.org) (`feat:`, `fix:`, `docs:`, …).
 
+## Releasing (maintainers)
+
+1. Bump `CFBundleShortVersionString` (and `CFBundleVersion`) in `Resources/Info.plist`.
+2. Add a `## [x.y.z] - YYYY-MM-DD` section to `CHANGELOG.md`; it becomes the release notes.
+3. Merge to `main`, then tag and push: `git tag vx.y.z && git push origin vx.y.z`.
+
+The `Release` workflow checks that the tag matches `Info.plist` and that the changelog has the section, runs the
+tests, builds a universal app with `scripts/package.sh`, and publishes the `.dmg`, `.zip` and `SHA256SUMS.txt`.
+
 ## Reporting a misread session
 
 `AgentsVisualizer --dump-json` (the binary inside the app bundle) prints what the dashboard sees. Redact titles

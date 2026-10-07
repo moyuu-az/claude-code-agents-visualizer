@@ -51,7 +51,14 @@ Claude Code と Claude for Mac のおかげで、複数のプロジェクトで�
 
 ## インストール
 
-ソースからビルドします（Xcode は不要で、Command Line Tools だけでビルドできます）。
+[Releases](https://github.com/moyuu-az/claude-code-agents-visualizer/releases) から最新の `.dmg`（または `.zip`）を
+ダウンロードし、アプリを「アプリケーション」へドラッグしてください。アドホック署名で公証されていないため、
+初回起動は macOS にブロックされます。**システム設定 › プライバシーとセキュリティ** で **このまま開く** を選んで
+ください（macOS 14 では右クリックして **開く**）。各リリースの `SHA256SUMS.txt` でファイルを検証できます。
+
+### ソースからビルド
+
+Xcode は不要で、Command Line Tools だけでビルドできます（SDK の要件は上記の動作環境を参照）。
 
 ```bash
 git clone https://github.com/moyuu-az/claude-code-agents-visualizer.git
@@ -65,10 +72,7 @@ cd claude-code-agents-visualizer && scripts/build-app.sh
 open "build/Claude Code Agents Visualizer.app"
 ```
 
-常用する場合は `/Applications` に移動してください。CI のビルド（各ワークフロー実行の `app` アーティファクト。
-ダウンロードには GitHub アカウントが必要）はアドホック署名で公証されていないため、初回の起動は macOS に
-ブロックされます。「システム設定 › プライバシーとセキュリティ」で「このまま開く」をクリックしてください
-（macOS 14 では、アプリを右クリックして「開く」を選びます）。
+`scripts/package.sh` はリリースと同じ `.dmg` と `.zip` を作ります（`UNIVERSAL=1` で arm64 + x86_64）。
 
 ## 仕組み
 
@@ -121,7 +125,7 @@ Finder や Dock から開いたアプリには、シェルの設定ファイル�
 Sources/AgentsVisualizerCore   データ層: 読み込み、状態判定、ディープリンク（UI なし、テスト済み）
 Sources/AgentsVisualizer       SwiftUI アプリ: ダッシュボード、メニューバー、Core Animation のビュー
 Tests/AgentsVisualizerCoreTests  ディスク上のフィクスチャを使う swift-testing のテスト
-scripts/                      build-app.sh, test.sh, demo.py, make-icon.swift
+scripts/                      build-app.sh, package.sh, test.sh, demo.py, make-icon.swift
 ```
 
 ```bash
