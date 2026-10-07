@@ -387,6 +387,7 @@ private struct AgentNode: View {
                     if agent.status.isActive {
                         ShimmerText(text: agent.activity ?? "")
                             .accessibilityRepresentation { Text(verbatim: agent.activity ?? "") }
+                            .accessibilityHidden(agent.activity == nil)
                     }
                 }
             }
