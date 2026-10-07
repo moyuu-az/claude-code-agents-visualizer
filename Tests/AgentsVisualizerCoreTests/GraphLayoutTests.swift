@@ -99,6 +99,23 @@ import Testing
         #expect(DashboardFilter.stableOrder(after).map(\.id) == ["/a", "/b"])
     }
 
+    /// The snapshot hands projects over in urgency order, which changes with every status flip. `localizedStandardCompare`
+    /// is not transitive for names with ignorable characters (`ａｐｐ` < `app\u{200B}` < `\u{200B}app` < `ａｐｐ`), and
+    /// what a sort makes of such a cycle depends on the order it is given.
+    @Test func projectOrderDoesNotDependOnTheInputOrder() {
+        let projects = ["ａｐｐ", "app\u{200B}", "\u{200B}app", "web"].enumerated().map { index, name in
+            ProjectGroup(id: "/\(index)", name: name, sessions: [session("s\(index)", .idle, startedMinutesAgo: 1)])
+        }
+        func permutations(_ items: [ProjectGroup]) -> [[ProjectGroup]] {
+            items.count <= 1 ? [items] : items.indices.flatMap { index in
+                var rest = items
+                let first = rest.remove(at: index)
+                return permutations(rest).map { [first] + $0 }
+            }
+        }
+        #expect(Set(permutations(projects).map { DashboardFilter.stableOrder($0).map(\.id) }).count == 1)
+    }
+
     @Test func emptyInputStaysEmpty() {
         #expect(DashboardFilter.stableOrder([]).isEmpty)
     }
