@@ -52,13 +52,17 @@ SESSIONS = [
         ("Explore", "Find every theme token", "running", 3),
         ("code-reviewer", "Review color contrast", "running", 1),
         ("general-purpose", "Update UI snapshots", "done", 6),
+        ("Explore", "Audit hard-coded colors", "done", 9),
     ], {}),
     ("acme-web", "Fix flaky checkout test", "waiting", "cli", 1, None, [], {"waitingFor": "permission prompt"}),
     ("acme-web", "Upgrade to React 20", "idle", "desktop", 25, None, [], {"pr": (128, "OPEN")}),
     ("payments-api", "Idempotent refunds", "busy", "desktop", 0, ("Bash", {"description": "Run the integration tests"}), [
         ("code-reviewer", "Concurrency review", "running", 2),
     ], {"worktree": "brave-otter", "pr": (42, "OPEN")}),
-    ("payments-api", "Postgres 17 migration plan", "idle", "desktop", 48, None, [], {"branch": "chore/pg17"}),
+    ("payments-api", "Postgres 17 migration plan", "idle", "desktop", 48, None, [
+        ("Plan", "Order the migration steps", "done", 52), ("Explore", "Find raw SQL queries", "done", 55),
+        ("code-reviewer", "Review lock timeouts", "done", 50),
+    ], {"branch": "chore/pg17"}),
     ("mobile-app", "Release notes for 3.2", "idle", "desktop", 12, None, [], {"pr": (311, "MERGED"), "unread": True}),
     ("mobile-app", "Crash in onboarding flow", "ended", "cli", 190, None, [], {}),
     ("infra", "Terraform drift check", "ended", "cli", 320, None, [], {}),
