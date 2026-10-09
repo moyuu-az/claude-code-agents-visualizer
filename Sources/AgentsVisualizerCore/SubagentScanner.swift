@@ -73,8 +73,9 @@ final class TaskNoticeIndex {
     private struct State {
         var offset: UInt64 = 0
         var notices: [String: TaskNotice] = [:]
-        /// Background shell commands and monitors by task id, with when they started.
-        var launches: [String: Date?] = [:]
+        /// Background shell commands and monitors by task id, with when they started and, for a monitor with a timeout,
+        /// when it expires: an expiring monitor posts only an event (`[Monitor expired …]`), never a `<status>`.
+        var launches: [String: (at: Date?, expiresAt: Date?)] = [:]
     }
 
     /// `<task-notification>`, then the `toolUseResult` keys of a background Bash command, a Monitor and a TaskStop.
@@ -91,11 +92,12 @@ final class TaskNoticeIndex {
 
     /// Background shell commands and monitors that have not ended. Ones started before `processStartedAt` ran in an
     /// earlier process of the session and died with it.
-    func runningTasks(in url: URL, processStartedAt: Date?) -> Set<String> {
+    func runningTasks(in url: URL, processStartedAt: Date?, now: Date) -> Set<String> {
         let state = refresh(url)
-        return Set(state.launches.compactMap { id, startedAt in
+        return Set(state.launches.compactMap { id, launch in
             guard state.notices[id] == nil else { return nil }
-            if let processStartedAt, let startedAt, startedAt < processStartedAt { return nil }
+            if let processStartedAt, let startedAt = launch.at, startedAt < processStartedAt { return nil }
+            if let expiresAt = launch.expiresAt, expiresAt <= now { return nil }
             return id
         })
     }
@@ -142,8 +144,12 @@ final class TaskNoticeIndex {
             guard let result = object["toolUseResult"] as? [String: Any] else { continue }
             // Bash with `run_in_background` (or moved there after its timeout), then Monitor. Todo tools also return a
             // `taskId`, but no `persistent`.
-            if let id = result["backgroundTaskId"] as? String ?? (result["persistent"] != nil ? result["taskId"] as? String : nil) {
-                state.launches.updateValue(at, forKey: id)  // `launches[id] = at` would drop it when `at` is nil
+            if let id = result["backgroundTaskId"] as? String {
+                state.launches[id] = (at, nil)
+            } else if let id = result["taskId"] as? String, result["persistent"] != nil {
+                // A persistent monitor watches until the session ends; any other expires `timeoutMs` after it started.
+                let timeout = result["persistent"] as? Bool == true ? nil : result["timeoutMs"] as? Double
+                state.launches[id] = (at, timeout.flatMap { at?.addingTimeInterval($0 / 1000) })
             } else if let id = result["task_id"] as? String, result["task_type"] != nil {
                 // TaskStop. A shell command stopped this way gets no `<task-notification>`.
                 state.notices[id] = TaskNotice(status: "killed", at: at)
@@ -211,9 +217,9 @@ final class SubagentScanner {
     var touchedTranscripts: Set<URL> { touched }
 
     /// Background shell commands and monitors of a live session that are still running, by task id.
-    func runningTasks(forSessionTranscript transcript: URL, processStartedAt: Date?) -> Set<String> {
+    func runningTasks(forSessionTranscript transcript: URL, processStartedAt: Date?, now: Date) -> Set<String> {
         touched.insert(transcript)
-        return notices.runningTasks(in: transcript, processStartedAt: processStartedAt)
+        return notices.runningTasks(in: transcript, processStartedAt: processStartedAt, now: now)
     }
 
     /// - Parameter processStartedAt: When the session's current process registered; agents last seen before that

@@ -189,6 +189,26 @@ import Testing
         #expect(session.activity == nil)  // the agent shows its own activity
     }
 
+    /// Seen in real transcripts: a Monitor that times out only posts an event (`[Monitor expired after 30m …]`) without
+    /// a `<status>`, so nothing but its timeout says it has ended.
+    @Test func expiredMonitorDoesNotKeepTheSessionRunning() throws {
+        let repo = fixture.url("code/app").path
+        try fixture.makeDirectory("code/app/.git")
+        try register(pid: 5, session: uuidA, cwd: repo, status: "idle",
+                     extra: ["startedAt": (now.timeIntervalSince1970 - 7200) * 1000])
+        let expired: [String: Any] = [
+            "type": "queue-operation", "operation": "enqueue", "timestamp": Line.iso(now.addingTimeInterval(-1200)),
+            "content": "<task-notification>\n<task-id>m1</task-id>\n<summary>Monitor event: \"CI\"</summary>\n<event>[Monitor expired after 30m with no events delivered. Re-arm it if you still need the watch.]</event>\n</task-notification>",
+        ]
+        try transcript("-code-app", uuidA, [
+            Line.user("watch CI", at: now.addingTimeInterval(-3100), cwd: repo),
+            Line.toolResult(at: now.addingTimeInterval(-3000), result: ["taskId": "m1", "timeoutMs": 1_800_000, "persistent": false]),
+            Line.assistantText("Watching", at: now.addingTimeInterval(-2990)),
+            expired,
+        ])
+        #expect(build(alive: [5]).allSessions.first?.status == .idle)
+    }
+
     @Test func backgroundCommandsOfAnEarlierProcessDoNotKeepTheSessionRunning() throws {
         let repo = fixture.url("code/app").path
         try fixture.makeDirectory("code/app/.git")
