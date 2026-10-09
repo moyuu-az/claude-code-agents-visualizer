@@ -85,15 +85,19 @@ The app is **read-only** and makes **no network requests**. Every 2 seconds it r
 
 | Source | Used for |
 | --- | --- |
-| `~/.claude/sessions/<pid>.json` | Which sessions have a live process and their status (`busy` / `waiting` / `idle`). A PID only counts if its process started before the session registered (the `startedAt` Claude Code records), so a recycled PID does not make a dead session look live. |
+| `~/.claude/sessions/<pid>.json` | Which sessions have a live process and their status (`busy` / `waiting` / `idle`). A PID only counts if its process started before the session registered (the `startedAt` Claude Code records), so a recycled PID does not make a dead session look live. When two live processes hold the same session (e.g. a terminal session also opened in Claude for Mac), the more urgent status wins. |
 | `~/Library/Application Support/Claude/claude-code-sessions/…` | Claude for Mac's session list: titles, desktop ids for deep links, archived flags, pull requests. |
 | `~/Library/Application Support/Claude/Local Storage/leveldb/` | Claude for Mac's unread sessions (the `epitaxy-unread-v1` entry of its Local Storage, a LevelDB database). Only that entry is decoded; the files are read without locking and never written, and a file changed mid-read is picked up on the next refresh. |
-| `~/.claude/projects/<project>/<session>.jsonl` | Everything else: working directory, branch, first prompt, the tool in flight, subagents (`<session>/subagents/`). Session details come from the first and last 512 KB of a transcript. To track subagents, the transcript of a live session that has any is also scanned once for `<task-notification>` entries (in 8 MB chunks), then only the bytes appended since. Unchanged files are not re-read. |
+| `~/.claude/projects/<project>/<session>.jsonl` | Everything else: working directory, branch, first prompt, the tool in flight, subagents (`<session>/subagents/`). Session details come from the first and last 512 KB of a transcript. To track subagents and background tasks, the transcript of every live session is also scanned once for `<task-notification>` entries and background task launches (in 8 MB chunks), then only the bytes appended since. Unchanged files are not re-read. |
 
 Subagents are listed for live sessions only. One counts as finished when its own transcript ends with a final
 answer or a user interrupt, or when the parent session received a `<task-notification>` for it; an unfinished agent
 last heard from before the session's current process started (the session was resumed after a crash or an app
 restart) is shown as interrupted.
+
+Claude Code marks a session `idle` as soon as its turn ends, even while commands, monitors or agents it started in
+the background keep working. Such a session is shown as running until every background command and monitor has
+ended (an end notice, a TaskStop, or a monitor reaching its timeout) and every agent has finished.
 
 Sessions open through Claude for Mac's URL scheme: `claude://code/continue?session=local_…` for desktop sessions
 and `claude://resume?session=<uuid>` for the rest. Ids are validated before they are put in a URL.
@@ -108,6 +112,8 @@ Continuous animations run in Core Animation (the window server), so the app stay
   Claude for Mac is open and records their remote turn as in progress, otherwise as ended (*Needs input* and *Done*
   are not recorded for them). Opening one shows it in Claude for Mac over its own connection; there is no
   `claude --resume` command for them.
+- A background task stopped from Claude for Mac's window leaves no record in the transcript, so its session shows as
+  running until the session's process exits.
 - Cloud sessions (claude.ai) are not listed.
 
 ### Configuration
