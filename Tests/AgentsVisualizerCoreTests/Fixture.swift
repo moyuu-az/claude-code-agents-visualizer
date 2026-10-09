@@ -80,9 +80,15 @@ enum Line {
         return object.merging(extra) { $1 }
     }
 
-    static func toolResult(at date: Date = Date()) -> [String: Any] {
-        ["type": "user", "timestamp": iso(date),
-         "message": ["role": "user", "content": [["type": "tool_result", "tool_use_id": "toolu_1", "content": "ok"]]]]
+    /// `result` is the `toolUseResult` Claude Code stores next to the message, e.g. `["backgroundTaskId": "b1"]` for a
+    /// command started with `run_in_background`.
+    static func toolResult(at date: Date = Date(), result: [String: Any]? = nil) -> [String: Any] {
+        var object: [String: Any] = [
+            "type": "user", "timestamp": iso(date),
+            "message": ["role": "user", "content": [["type": "tool_result", "tool_use_id": "toolu_1", "content": "ok"]]],
+        ]
+        if let result { object["toolUseResult"] = result }
+        return object
     }
 
     static func assistantText(_ text: String, stopReason: String? = "end_turn", at date: Date = Date(),

@@ -91,6 +91,14 @@ public final class SnapshotBuilder {
         let agents: [AgentInfo]
         if let transcript, let live {
             agents = subagents.agents(forSessionTranscript: transcript, sessionAlive: true, processStartedAt: live.startedAt)
+            // Claude Code reports `idle` as soon as the turn ends, also while the commands, monitors and agents it
+            // started in the background keep working (Claude for Mac lists them as running tasks). Asked on every pass,
+            // busy or not: a transcript left out of a pass is evicted from the index and read in full again.
+            let tasks = subagents.runningTasks(forSessionTranscript: transcript, processStartedAt: live.startedAt, now: now)
+            if status == .idle, !tasks.isEmpty || agents.contains(where: \.status.isActive) {
+                status = .running
+                activity = tasks.isEmpty ? nil : String(localized: "Background tasks: \(tasks.count)")
+            }
         } else {
             agents = []
         }

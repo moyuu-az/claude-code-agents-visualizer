@@ -6,11 +6,13 @@ struct LiveSessionRecord: Decodable, Sendable, Equatable {
     let pid: Int32
     let sessionId: String?
     let cwd: String?
-    let startedAt: Date?
+    /// When the process registered. `LiveSessionRegistry.load` moves it to the earliest of the session's live processes.
+    var startedAt: Date?
     let kind: String?
     let entrypoint: String?
-    /// Claude Desktop's `local_…` session id when the process is hosted by the desktop app.
-    let hostSessionId: String?
+    /// Claude Desktop's `local_…` session id when the process is hosted by the desktop app. `LiveSessionRegistry.load`
+    /// keeps it when the session's other process wins.
+    var hostSessionId: String?
     let name: String?
     /// Who named the session: `user`, `peer`, `derived` (from the folder), `auto`, …
     let nameSource: String?
@@ -80,13 +82,28 @@ enum LiveSessionRegistry {
                   record.parkedJobId == nil, !record.spare,
                   isAlive(record.pid, record.startedAt)
             else { continue }
-            // A session resumed in a second process registers twice; the most recently updated one wins.
-            if let existing = result[sessionId],
-               (existing.statusUpdatedAt ?? .distantPast) >= (record.statusUpdatedAt ?? .distantPast) {
+            // A session resumed in a second process registers twice, and both can stay alive (e.g. a terminal session
+            // also opened in Claude for Mac). The one doing something decides. Work either process started in the
+            // background is still running, so the session counts as started with the earlier process. A busy terminal
+            // process must not lose the Claude for Mac session that also hosts it: links open that one in place.
+            guard let existing = result[sessionId] else {
+                result[sessionId] = record
                 continue
             }
-            result[sessionId] = record
+            let (winner, loser) = outranks(record, existing) ? (record, existing) : (existing, record)
+            var merged = winner
+            merged.startedAt = [record.startedAt, existing.startedAt].compactMap { $0 }.min()
+            merged.hostSessionId = winner.hostSessionId ?? loser.hostSessionId
+            result[sessionId] = merged
         }
         return result
+    }
+
+    /// The more urgent status, then the more recently updated.
+    private static func outranks(_ lhs: LiveSessionRecord, _ rhs: LiveSessionRecord) -> Bool {
+        if lhs.sessionStatus.urgency != rhs.sessionStatus.urgency {
+            return lhs.sessionStatus.urgency < rhs.sessionStatus.urgency
+        }
+        return (lhs.statusUpdatedAt ?? .distantPast) > (rhs.statusUpdatedAt ?? .distantPast)
     }
 }

@@ -164,6 +164,67 @@ import Testing
 
     @Test func missingFile() {
         #expect(TaskNoticeIndex().notices(in: fixture.url("none.jsonl")).isEmpty)
+        #expect(TaskNoticeIndex().runningTasks(in: fixture.url("none.jsonl"), processStartedAt: nil, now: Date()).isEmpty)
+    }
+
+    /// Shapes copied from real transcripts: `run_in_background` Bash, Monitor, and TaskStop results.
+    @Test func backgroundCommandsAndMonitorsRunUntilNotifiedOrStopped() throws {
+        let monitorEvent: [String: Any] = [
+            "type": "queue-operation", "operation": "enqueue", "timestamp": Line.iso(Date()),
+            "content": "<task-notification>\n<task-id>mon1</task-id>\n<summary>Monitor event: \"CI\"</summary>\n<event>build 3/9</event>\n</task-notification>",
+        ]
+        let url = try fixture.writeJSONL("p.jsonl", [
+            Line.toolResult(result: ["stdout": "", "stderr": "", "interrupted": false, "backgroundTaskId": "run1"]),
+            Line.toolResult(result: ["stdout": "", "backgroundTaskId": "done1", "timedOutAfterMs": 120000]),
+            Line.toolResult(result: ["stdout": "", "backgroundTaskId": "stop1"]),
+            Line.toolResult(result: ["taskId": "mon1", "timeoutMs": 300000, "persistent": false]),
+            Line.toolResult(result: ["taskId": "1", "updatedFields": ["status"]]),  // a todo item, not a process
+            Line.taskNotification(agentId: "done1", status: "completed"),
+            monitorEvent,  // an event from a monitor that keeps watching
+            // TaskStop ends a shell command without a notification.
+            Line.toolResult(result: ["message": "Successfully stopped task: stop1", "task_id": "stop1", "task_type": "local_bash"]),
+        ])
+        #expect(TaskNoticeIndex().runningTasks(in: url, processStartedAt: nil, now: Date()) == ["run1", "mon1"])
+    }
+
+    @Test func backgroundTasksOfAnEarlierProcessDiedWithIt() throws {
+        let restartedAt = Date(timeIntervalSince1970: 1_790_000_000)
+        let url = try fixture.writeJSONL("p.jsonl", [
+            Line.toolResult(at: restartedAt.addingTimeInterval(-60), result: ["backgroundTaskId": "old"]),
+            Line.toolResult(at: restartedAt.addingTimeInterval(1), result: ["backgroundTaskId": "new"]),
+        ])
+        let index = TaskNoticeIndex()
+        #expect(index.runningTasks(in: url, processStartedAt: restartedAt, now: Date()) == ["new"])
+        #expect(index.runningTasks(in: url, processStartedAt: nil, now: Date()) == ["old", "new"])
+    }
+
+    @Test func undatedLaunchCannotBeAgedOut() throws {
+        var undated = Line.toolResult(result: ["backgroundTaskId": "b1"])
+        undated["timestamp"] = nil
+        let url = try fixture.writeJSONL("p.jsonl", [undated])
+        #expect(TaskNoticeIndex().runningTasks(in: url, processStartedAt: Date(), now: Date()) == ["b1"])
+    }
+
+    /// An expiring monitor only posts an event without `<status>`; its timeout is the only end marker.
+    @Test func monitorsEndWhenTheyExpireUnlessPersistent() throws {
+        let start = Date(timeIntervalSince1970: 1_790_000_000)
+        let url = try fixture.writeJSONL("p.jsonl", [
+            Line.toolResult(at: start, result: ["taskId": "timed", "timeoutMs": 1_800_000, "persistent": false]),
+            Line.toolResult(at: start, result: ["taskId": "forever", "timeoutMs": 1_800_000, "persistent": true]),
+            Line.toolResult(at: start, result: ["taskId": "noTimeout", "persistent": false]),
+        ])
+        let index = TaskNoticeIndex()
+        #expect(index.runningTasks(in: url, processStartedAt: nil, now: start.addingTimeInterval(1799))
+            == ["timed", "forever", "noTimeout"])
+        #expect(index.runningTasks(in: url, processStartedAt: nil, now: start.addingTimeInterval(1800)) == ["forever", "noTimeout"])
+    }
+
+    @Test func backgroundTaskEndingInALaterRefreshIsPickedUp() throws {
+        let index = TaskNoticeIndex()
+        let url = try fixture.writeJSONL("p.jsonl", [Line.toolResult(result: ["backgroundTaskId": "b1"])])
+        #expect(index.runningTasks(in: url, processStartedAt: nil, now: Date()) == ["b1"])
+        try fixture.append("p.jsonl", Fixture.json(Line.taskNotification(agentId: "b1", status: "failed")) + "\n")
+        #expect(index.runningTasks(in: url, processStartedAt: nil, now: Date()).isEmpty)
     }
 }
 

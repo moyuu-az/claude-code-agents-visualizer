@@ -43,6 +43,7 @@
 "A dialog is open" = "ダイアログが開いています";
 "Git worktree" = "Git worktree";
 "Agents running: %lld" = "実行中のエージェント: %lld";
+"Background tasks: %lld" = "バックグラウンドで %lld 件実行中";
 "Hide finished agents" = "完了したエージェントを隠す";
 "Show finished agents (%lld)" = "完了したエージェントを表示（%lld）";
 "Show more agents (%lld)" = "ほかのエージェントを表示（%lld）";

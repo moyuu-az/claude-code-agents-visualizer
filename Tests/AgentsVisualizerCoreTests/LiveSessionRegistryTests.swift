@@ -68,6 +68,38 @@ import Testing
         #expect(record.sessionStatus == .running)
     }
 
+    /// Seen in the wild: a terminal session also opened in Claude for Mac. The terminal process kept working while the
+    /// app's process, idle but updated more recently, hid it.
+    @Test func sameSessionInTwoProcessesKeepsTheOneDoingWork() throws {
+        try register(pid: 10, ["sessionId": "s", "status": "busy", "statusUpdatedAt": 1_791_000_000_000])
+        try register(pid: 11, ["sessionId": "s", "status": "idle", "statusUpdatedAt": 1_791_000_001_000])
+        try register(pid: 12, ["sessionId": "s", "status": "waiting", "statusUpdatedAt": 1_790_000_000_000])
+        let record = try #require(LiveSessionRegistry.load(directory: directory) { _, _ in true }["s"])
+        #expect(record.pid == 12)
+        #expect(record.sessionStatus == .needsInput)
+    }
+
+    /// The app-hosted process loses to the busy terminal one, but its Claude for Mac session is still the one to open.
+    @Test func sameSessionInTwoProcessesKeepsTheHostSessionOfEither() throws {
+        try register(pid: 10, ["sessionId": "s", "status": "busy", "statusUpdatedAt": 1_791_000_000_000])
+        try register(pid: 11, ["sessionId": "s", "status": "idle", "statusUpdatedAt": 1_791_000_001_000,
+                               "hostSessionId": "local_s"])
+        let record = try #require(LiveSessionRegistry.load(directory: directory) { _, _ in true }["s"])
+        #expect(record.pid == 10)
+        #expect(record.hostSessionId == "local_s")
+    }
+
+    /// Work started by either process is still alive, so it must not look as if it predates the session's process.
+    @Test func sameSessionInTwoProcessesStartedWithTheEarlierOne() throws {
+        try register(pid: 10, ["sessionId": "s", "status": "idle", "startedAt": 1_790_000_000_000,
+                               "statusUpdatedAt": 1_791_000_000_000])
+        try register(pid: 11, ["sessionId": "s", "status": "idle", "startedAt": 1_790_500_000_000,
+                               "statusUpdatedAt": 1_791_000_001_000])
+        let record = try #require(LiveSessionRegistry.load(directory: directory) { _, _ in true }["s"])
+        #expect(record.pid == 11)
+        #expect(record.startedAt == Date(timeIntervalSince1970: 1_790_000_000))
+    }
+
     @Test func passesRegistrationTimeToLivenessProbe() throws {
         try register(pid: 10, ["sessionId": "s", "startedAt": 1_700_000_000_000])
         nonisolated(unsafe) var seen: Date?

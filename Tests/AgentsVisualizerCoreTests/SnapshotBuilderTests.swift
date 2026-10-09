@@ -147,6 +147,99 @@ import Testing
         #expect(session.runningAgentCount == 1)
     }
 
+    /// Seen in the wild: Claude for Mac showed "2 running tasks" while the dashboard said the session was done.
+    /// Claude Code reports `idle` as soon as the turn ends, also while commands it started in the background run.
+    @Test func idleSessionWithBackgroundCommandsIsRunning() throws {
+        let repo = fixture.url("code/app").path
+        try fixture.makeDirectory("code/app/.git")
+        try register(pid: 5, session: uuidA, cwd: repo, status: "idle")
+        try transcript("-code-app", uuidA, [
+            Line.user("verify the PRs", at: now.addingTimeInterval(-120), cwd: repo),
+            Line.toolResult(at: now.addingTimeInterval(-100), result: ["backgroundTaskId": "b1"]),
+            Line.toolResult(at: now.addingTimeInterval(-90), result: ["backgroundTaskId": "b2"]),
+            Line.assistantText("Verifying in the background", at: now.addingTimeInterval(-80)),
+        ])
+        let builder = SnapshotBuilder(environment: fixture.environment(alive: [5]))
+        let running = try #require(builder.build(now: now).allSessions.first)
+        #expect(running.status == .running)
+        #expect(running.activity == "Background tasks: 2")
+
+        try fixture.append(".claude/projects/-code-app/\(uuidA).jsonl", [
+            Line.taskNotification(agentId: "b1", status: "completed"),
+            Line.toolResult(result: ["task_id": "b2", "task_type": "local_bash", "message": "Successfully stopped task: b2"]),
+            Line.assistantText("All green"),
+        ].map(Fixture.json).joined(separator: "\n") + "\n")
+        let done = try #require(builder.build(now: now).allSessions.first)
+        #expect(done.status == .idle)
+        #expect(done.activity == nil)
+    }
+
+    @Test func idleSessionWithABackgroundAgentIsRunning() throws {
+        let repo = fixture.url("code/app").path
+        try fixture.makeDirectory("code/app/.git")
+        try register(pid: 5, session: uuidA, cwd: repo, status: "idle")
+        try transcript("-code-app", uuidA, [Line.user("review it", cwd: repo), Line.assistantText("Two reviewers are on it")])
+        let subagents = ".claude/projects/-code-app/\(uuidA)/subagents"
+        try fixture.writeJSONL("\(subagents)/agent-r1.jsonl", [Line.user("review"), Line.assistantTool("Read", input: [:])])
+        try fixture.writeJSON("\(subagents)/agent-r1.meta.json", ["agentType": "code-reviewer", "requestShape": "background"])
+
+        let session = try #require(build(alive: [5]).allSessions.first)
+        #expect(session.status == .running)
+        #expect(session.runningAgentCount == 1)
+        #expect(session.activity == nil)  // the agent shows its own activity
+    }
+
+    /// Seen in real transcripts: a Monitor that times out only posts an event (`[Monitor expired after 30m …]`) without
+    /// a `<status>`, so nothing but its timeout says it has ended.
+    @Test func expiredMonitorDoesNotKeepTheSessionRunning() throws {
+        let repo = fixture.url("code/app").path
+        try fixture.makeDirectory("code/app/.git")
+        try register(pid: 5, session: uuidA, cwd: repo, status: "idle",
+                     extra: ["startedAt": (now.timeIntervalSince1970 - 7200) * 1000])
+        let expired: [String: Any] = [
+            "type": "queue-operation", "operation": "enqueue", "timestamp": Line.iso(now.addingTimeInterval(-1200)),
+            "content": "<task-notification>\n<task-id>m1</task-id>\n<summary>Monitor event: \"CI\"</summary>\n<event>[Monitor expired after 30m with no events delivered. Re-arm it if you still need the watch.]</event>\n</task-notification>",
+        ]
+        try transcript("-code-app", uuidA, [
+            Line.user("watch CI", at: now.addingTimeInterval(-3100), cwd: repo),
+            Line.toolResult(at: now.addingTimeInterval(-3000), result: ["taskId": "m1", "timeoutMs": 1_800_000, "persistent": false]),
+            Line.assistantText("Watching", at: now.addingTimeInterval(-2990)),
+            expired,
+        ])
+        #expect(build(alive: [5]).allSessions.first?.status == .idle)
+    }
+
+    @Test func backgroundCommandsOfAnEarlierProcessDoNotKeepTheSessionRunning() throws {
+        let repo = fixture.url("code/app").path
+        try fixture.makeDirectory("code/app/.git")
+        // Resumed 10 minutes ago in a new process (`register` sets startedAt to now - 600s).
+        try register(pid: 5, session: uuidA, cwd: repo, status: "idle")
+        try transcript("-code-app", uuidA, [
+            Line.user("go", at: now.addingTimeInterval(-3600), cwd: repo),
+            Line.toolResult(at: now.addingTimeInterval(-3500), result: ["backgroundTaskId": "b1"]),
+            Line.assistantText("Started", at: now.addingTimeInterval(-3400)),
+        ])
+        #expect(build(alive: [5]).allSessions.first?.status == .idle)
+        #expect(build(alive: []).allSessions.first?.status == .ended)
+    }
+
+    /// The process that is not doing anything must not hide the one that is.
+    @Test func sessionOpenInTwoProcessesIsRunningWhileEitherWorks() throws {
+        let repo = fixture.url("code/app").path
+        try fixture.makeDirectory("code/app/.git")
+        try register(pid: 5, session: uuidA, cwd: repo, status: "busy",
+                     extra: ["entrypoint": "cli", "statusUpdatedAt": (now.timeIntervalSince1970 - 300) * 1000])
+        try register(pid: 6, session: uuidA, cwd: repo, status: "idle", extra: ["hostSessionId": "local_a"])
+        try transcript("-code-app", uuidA, [Line.user("go", cwd: repo), Line.assistantTool("Bash", input: ["command": "npm test"])])
+
+        let session = try #require(build(alive: [5, 6]).allSessions.first)
+        #expect(session.status == .running)
+        #expect(session.activity == "Bash · npm test")
+        #expect(session.pid == 5)
+        // The busy CLI process knows no Claude for Mac session; opening must still continue the app's, not import a copy.
+        #expect(session.desktopSessionId == "local_a")
+    }
+
     @Test func liveSessionWithoutTranscriptYetStillShows() throws {
         try register(pid: 9, session: uuidA, cwd: fixture.url("fresh").path, status: "idle", extra: ["hostSessionId": "local_new"])
         let session = try #require(build(alive: [9]).allSessions.first)
