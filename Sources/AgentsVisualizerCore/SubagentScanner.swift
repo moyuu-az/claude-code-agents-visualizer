@@ -66,15 +66,20 @@ enum SubagentStatusResolver {
     }
 }
 
-/// Incrementally indexes `<task-notification>` entries of parent transcripts. Only the bytes appended since the
-/// previous refresh are read, so multi-MB transcripts cost nothing after the first pass.
+/// Incrementally indexes the background work of parent transcripts: `<task-notification>` entries, and the shell
+/// commands (`run_in_background`) and monitors the session started. Only the bytes appended since the previous refresh
+/// are read, so multi-MB transcripts cost nothing after the first pass.
 final class TaskNoticeIndex {
     private struct State {
         var offset: UInt64 = 0
         var notices: [String: TaskNotice] = [:]
+        /// Background shell commands and monitors by task id, with when they started.
+        var launches: [String: Date?] = [:]
     }
 
-    private static let marker = Data("<task-notification>".utf8)
+    /// `<task-notification>`, then the `toolUseResult` keys of a background Bash command, a Monitor and a TaskStop.
+    private static let markers = ["<task-notification>", #""backgroundTaskId""#, #""persistent""#, #""task_type""#]
+        .map { Data($0.utf8) }
     private let chunkBytes: Int
     private var states: [URL: State] = [:]
 
@@ -82,10 +87,23 @@ final class TaskNoticeIndex {
         self.chunkBytes = chunkBytes
     }
 
-    func notices(in url: URL) -> [String: TaskNotice] {
+    func notices(in url: URL) -> [String: TaskNotice] { refresh(url).notices }
+
+    /// Background shell commands and monitors that have not ended. Ones started before `processStartedAt` ran in an
+    /// earlier process of the session and died with it.
+    func runningTasks(in url: URL, processStartedAt: Date?) -> Set<String> {
+        let state = refresh(url)
+        return Set(state.launches.compactMap { id, startedAt in
+            guard state.notices[id] == nil else { return nil }
+            if let processStartedAt, let startedAt, startedAt < processStartedAt { return nil }
+            return id
+        })
+    }
+
+    private func refresh(_ url: URL) -> State {
         guard let stamp = FileStamp.of(url) else {
             states[url] = nil
-            return [:]
+            return State()
         }
         var state = states[url] ?? State()
         if stamp.size < state.offset { state = State() }  // truncated or replaced: start over
@@ -100,26 +118,44 @@ final class TaskNoticeIndex {
                 continue
             }
             let complete = data[data.startIndex...lastNewline]
-            autoreleasepool { Self.collect(from: complete, into: &state.notices) }
+            autoreleasepool { Self.collect(from: complete, into: &state) }
             state.offset += UInt64(complete.count)
         }
         states[url] = state
-        return state.notices
+        return state
     }
 
     func retain(only urls: Set<URL>) {
         states = states.filter { urls.contains($0.key) }
     }
 
-    static func collect(from data: Data, into notices: inout [String: TaskNotice]) {
-        for line in data.split(separator: UInt8(ascii: "\n")) where line.range(of: marker) != nil {
+    private static func collect(from data: Data, into state: inout State) {
+        for line in data.split(separator: UInt8(ascii: "\n")) where markers.contains(where: { contains(line, $0) }) {
             guard let object = (try? JSONSerialization.jsonObject(with: Data(line))) as? [String: Any] else { continue }
             let at = Timestamp.parse(object["timestamp"] as? String)
             for text in textBlocks(of: object) {
                 for (taskId, status) in parse(text) {
                     // Notices arrive in order; the newest one per task wins.
-                    notices[taskId] = TaskNotice(status: status, at: at)
+                    state.notices[taskId] = TaskNotice(status: status, at: at)
                 }
+            }
+            guard let result = object["toolUseResult"] as? [String: Any] else { continue }
+            // Bash with `run_in_background` (or moved there after its timeout), then Monitor. Todo tools also return a
+            // `taskId`, but no `persistent`.
+            if let id = result["backgroundTaskId"] as? String ?? (result["persistent"] != nil ? result["taskId"] as? String : nil) {
+                state.launches.updateValue(at, forKey: id)  // `launches[id] = at` would drop it when `at` is nil
+            } else if let id = result["task_id"] as? String, result["task_type"] != nil {
+                // TaskStop. A shell command stopped this way gets no `<task-notification>`.
+                state.notices[id] = TaskNotice(status: "killed", at: at)
+            }
+        }
+    }
+
+    /// `memmem`: `Data.range(of:)` made the first pass over live transcripts twice as slow once there were four markers.
+    private static func contains(_ line: Data, _ marker: Data) -> Bool {
+        line.withUnsafeBytes { haystack in
+            marker.withUnsafeBytes { needle in
+                memmem(haystack.baseAddress, haystack.count, needle.baseAddress, needle.count) != nil
             }
         }
     }
@@ -173,6 +209,12 @@ final class SubagentScanner {
 
     /// Transcript URLs read by this scanner during the current pass (so the shared reader keeps them cached).
     var touchedTranscripts: Set<URL> { touched }
+
+    /// Background shell commands and monitors of a live session that are still running, by task id.
+    func runningTasks(forSessionTranscript transcript: URL, processStartedAt: Date?) -> Set<String> {
+        touched.insert(transcript)
+        return notices.runningTasks(in: transcript, processStartedAt: processStartedAt)
+    }
 
     /// - Parameter processStartedAt: When the session's current process registered; agents last seen before that
     ///   belonged to an earlier process of the same (resumed) session.
