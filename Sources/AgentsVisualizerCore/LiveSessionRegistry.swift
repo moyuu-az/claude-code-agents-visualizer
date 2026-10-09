@@ -10,8 +10,9 @@ struct LiveSessionRecord: Decodable, Sendable, Equatable {
     var startedAt: Date?
     let kind: String?
     let entrypoint: String?
-    /// Claude Desktop's `local_…` session id when the process is hosted by the desktop app.
-    let hostSessionId: String?
+    /// Claude Desktop's `local_…` session id when the process is hosted by the desktop app. `LiveSessionRegistry.load`
+    /// keeps it when the session's other process wins.
+    var hostSessionId: String?
     let name: String?
     /// Who named the session: `user`, `peer`, `derived` (from the folder), `auto`, …
     let nameSource: String?
@@ -83,14 +84,17 @@ enum LiveSessionRegistry {
             else { continue }
             // A session resumed in a second process registers twice, and both can stay alive (e.g. a terminal session
             // also opened in Claude for Mac). The one doing something decides. Work either process started in the
-            // background is still running, so the session counts as started with the earlier process.
+            // background is still running, so the session counts as started with the earlier process. A busy terminal
+            // process must not lose the Claude for Mac session that also hosts it: links open that one in place.
             guard let existing = result[sessionId] else {
                 result[sessionId] = record
                 continue
             }
-            var winner = outranks(record, existing) ? record : existing
-            winner.startedAt = [record.startedAt, existing.startedAt].compactMap { $0 }.min()
-            result[sessionId] = winner
+            let (winner, loser) = outranks(record, existing) ? (record, existing) : (existing, record)
+            var merged = winner
+            merged.startedAt = [record.startedAt, existing.startedAt].compactMap { $0 }.min()
+            merged.hostSessionId = winner.hostSessionId ?? loser.hostSessionId
+            result[sessionId] = merged
         }
         return result
     }

@@ -236,6 +236,8 @@ import Testing
         #expect(session.status == .running)
         #expect(session.activity == "Bash · npm test")
         #expect(session.pid == 5)
+        // The busy CLI process knows no Claude for Mac session; opening must still continue the app's, not import a copy.
+        #expect(session.desktopSessionId == "local_a")
     }
 
     @Test func liveSessionWithoutTranscriptYetStillShows() throws {

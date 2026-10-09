@@ -79,6 +79,16 @@ import Testing
         #expect(record.sessionStatus == .needsInput)
     }
 
+    /// The app-hosted process loses to the busy terminal one, but its Claude for Mac session is still the one to open.
+    @Test func sameSessionInTwoProcessesKeepsTheHostSessionOfEither() throws {
+        try register(pid: 10, ["sessionId": "s", "status": "busy", "statusUpdatedAt": 1_791_000_000_000])
+        try register(pid: 11, ["sessionId": "s", "status": "idle", "statusUpdatedAt": 1_791_000_001_000,
+                               "hostSessionId": "local_s"])
+        let record = try #require(LiveSessionRegistry.load(directory: directory) { _, _ in true }["s"])
+        #expect(record.pid == 10)
+        #expect(record.hostSessionId == "local_s")
+    }
+
     /// Work started by either process is still alive, so it must not look as if it predates the session's process.
     @Test func sameSessionInTwoProcessesStartedWithTheEarlierOne() throws {
         try register(pid: 10, ["sessionId": "s", "status": "idle", "startedAt": 1_790_000_000_000,
