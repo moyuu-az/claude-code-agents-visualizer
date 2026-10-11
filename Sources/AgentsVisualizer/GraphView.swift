@@ -290,6 +290,10 @@ private struct ProjectNode: View {
                     Text(count, format: .number).font(.caption2.monospacedDigit())
                 }
                 .help(Text(status.label))
+                // The dot carries the meaning visually; VoiceOver would otherwise read just the number.
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text(status.label))
+                .accessibilityValue(Text(count, format: .number))
             }
         }
         if project.unreadCount > 0 {
