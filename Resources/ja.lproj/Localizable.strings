@@ -30,6 +30,7 @@
 "Agents running" = "実行中のエージェント";
 "Agents" = "エージェント";
 "Unread" = "未読";
+"Reply waiting to be read" = "未読の返信があります";
 "Unread: opening the session in Claude marks it as read" = "未読: Claude でセッションを開くと既読になります";
 "Refresh" = "更新";
 "Refresh now (updates automatically every 2 seconds)" = "今すぐ更新（2 秒ごとに自動で更新されます）";

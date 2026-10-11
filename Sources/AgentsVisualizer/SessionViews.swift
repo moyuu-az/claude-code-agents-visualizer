@@ -18,7 +18,11 @@ struct SessionRow: View {
             }
         }
         .background {
-            if session.status == .needsInput { NeedsInputGlow() }
+            if session.status == .needsInput {
+                NeedsInputGlow()
+            } else if session.isUnread {
+                RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.unread.opacity(0.12)).padding(.horizontal, 4)
+            }
         }
         .animation(.snappy, value: session.status)
     }
@@ -51,6 +55,9 @@ struct SessionRow: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.orange)
                     .transition(.blurReplace)
+                }
+                if session.isUnread {
+                    UnreadReplyLabel().transition(.blurReplace)
                 }
                 if let activity = session.activity {
                     Label {
@@ -117,6 +124,40 @@ struct UnreadDot: View {
             .foregroundStyle(.tint)
             .help(Text("Unread: opening the session in Claude marks it as read"))
             .accessibilityLabel(Text("Unread"))
+    }
+}
+
+extension Color {
+    /// Unread replies: Claude for Mac's sidebar dot uses the accent colour too.
+    static let unread = Color.accentColor
+    static let unreadSymbol = "envelope.badge.fill"
+}
+
+extension ProjectGroup {
+    /// Orange while a session is blocked on you, the unread colour while a reply waits to be read.
+    var attentionTint: Color? {
+        topStatus == .needsInput ? .orange.opacity(0.14) : unreadCount > 0 ? Color.unread.opacity(0.12) : nil
+    }
+}
+
+/// The line that says a session's reply waits for you; unread sessions also sort to the top.
+struct UnreadReplyLabel: View {
+    var body: some View {
+        Label("Reply waiting to be read", systemImage: Color.unreadSymbol)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(Color.unread)
+            .lineLimit(1)
+    }
+}
+
+/// Outline that sets unread cards apart from idle ones, which share the blue.
+struct UnreadOutline: View {
+    let cornerRadius: CGFloat
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .strokeBorder(Color.unread.opacity(0.75), lineWidth: 1.5)
+            .allowsHitTesting(false)
     }
 }
 

@@ -29,8 +29,10 @@ What was I doing in the other repo?"* This app answers that at a glance.
   | **Ended** | No live process holds the session. |
 - **Unread sessions**: a session that finished while you were looking elsewhere gets a dot, the same one as in
   Claude for Mac's sidebar, and an *Unread* counter appears at the top. Unread sessions show in every time range
-  and in the menu bar until you open them in Claude for Mac. Sessions started in a terminal or IDE are never
-  marked unread: Claude for Mac does not track them.
+  and in the menu bar until you open them in Claude for Mac. A reply waits for you there, so they move to the top
+  (on the dashboard and in the menu bar right after the sessions that need you), with an outline and a
+  *Reply waiting to be read* line. Sessions started in a terminal or IDE are never marked unread: Claude for Mac
+  does not track them.
 - **Subagents of live sessions** as a tree under the session: type, description, live stopwatch, what the agent is
   doing right now, and how it ended (completed / failed / stopped / interrupted). Running agents orbit their
   session; dashes flow from the session to each working agent.
@@ -39,7 +41,8 @@ What was I doing in the other repo?"* This app answers that at a glance.
   activity log lists agents starting and finishing and sessions starting, finishing turns or needing you.
   Sessions sit in two staggered columns and each session's agents fill a line across the rest of the window, with
   `+n` for the finished ones that do not fit, so a busy project stays on one screen. Nodes keep their place: projects
-  in name order, sessions oldest first with new ones added at the end. ⌘1 returns to the card dashboard.
+  in name order, sessions oldest first with new ones added at the end. Unread sessions are the exception: they move
+  to the top, with their project, until you open them. ⌘1 returns to the card dashboard.
 - **One click to open** the session in Claude for Mac. Sessions started in a terminal or IDE are imported into
   Claude for Mac after a confirmation (or copy the `claude --resume` command instead).
 - **Menu bar extra** with the number of sessions that need you, and a compact list of live and unread sessions.

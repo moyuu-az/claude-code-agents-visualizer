@@ -106,7 +106,7 @@ struct MenuBarPanel: View {
 
 enum SnapshotOrdering {
     static func urgentFirst(_ lhs: SessionInfo, _ rhs: SessionInfo) -> Bool {
-        if lhs.status.urgency != rhs.status.urgency { return lhs.status.urgency < rhs.status.urgency }
+        if lhs.attentionRank != rhs.attentionRank { return lhs.attentionRank < rhs.attentionRank }
         return (lhs.lastActivityAt ?? .distantPast) > (rhs.lastActivityAt ?? .distantPast)
     }
 }

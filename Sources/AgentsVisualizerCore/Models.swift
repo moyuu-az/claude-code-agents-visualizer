@@ -145,6 +145,10 @@ public struct SessionInfo: Identifiable, Sendable, Hashable, Codable {
 
     public var runningAgentCount: Int { agents.count { $0.status.isActive } }
 
+    /// Lower ranks need you sooner and sort first: a session blocked on you, then a reply you have not read (it waits
+    /// for your answer too), then the rest by status. Unread sessions are never running or blocked.
+    public var attentionRank: Int { status == .needsInput ? 0 : isUnread ? 1 : status.urgency + 1 }
+
     /// `cwd` as a folder on this Mac, or nil for SSH sessions: their `cwd` is a path on the remote host, and a folder
     /// at the same path on this Mac is a different checkout. They are only ever opened as a Claude for Mac session.
     public var localCwd: String? { surface == .ssh ? nil : cwd }
@@ -170,6 +174,11 @@ public struct ProjectGroup: Identifiable, Sendable, Hashable, Codable {
     }
 
     public var lastActivityAt: Date? { sessions.compactMap(\.lastActivityAt).max() }
+
+    /// The lowest `SessionInfo.attentionRank` among the project's sessions.
+    public var attentionRank: Int { sessions.map(\.attentionRank).min() ?? Int.max }
+
+    public var unreadCount: Int { sessions.count(where: \.isUnread) }
 }
 
 /// Problems worth surfacing in the UI instead of silently showing an empty dashboard.
