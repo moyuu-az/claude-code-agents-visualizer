@@ -483,6 +483,24 @@ import Testing
         #expect(build(alive: [1, 2, 3]).projects.map(\.name) == ["busy", "idle-new", "idle-old"])
     }
 
+    /// The menu bar sorts with this too. Without the `id` tie-break, sessions with the same status and activity time
+    /// came out in whatever order the input had, so rows could swap places between refreshes.
+    @Test func sessionOrderIsTotalWhenStatusAndActivityTie() {
+        func session(_ id: String, _ status: SessionStatus, at: Date?) -> SessionInfo {
+            SessionInfo(id: id, desktopSessionId: nil, title: id, status: status, waitingFor: nil, surface: .desktop,
+                        sshHost: nil, cwd: "/repo", worktreeName: nil, branch: nil, pid: nil, startedAt: nil,
+                        lastActivityAt: at, activity: nil, agents: [], pullRequests: [], transcriptPath: nil)
+        }
+        let sessions = [
+            session("b-tied", .idle, at: now), session("a-tied", .idle, at: now),
+            session("d-undated", .idle, at: nil), session("c-undated", .idle, at: nil),
+            session("e-older", .idle, at: now.addingTimeInterval(-60)), session("z-urgent", .needsInput, at: nil),
+        ]
+        let expected = ["z-urgent", "a-tied", "b-tied", "e-older", "c-undated", "d-undated"]
+        #expect(sessions.sorted(by: SnapshotBuilder.sessionOrder).map(\.id) == expected)
+        #expect(sessions.reversed().sorted(by: SnapshotBuilder.sessionOrder).map(\.id) == expected)
+    }
+
     @Test func repeatedBuildsAreStableAndPickUpChanges() throws {
         let repo = fixture.url("code/app").path
         try fixture.makeDirectory("code/app/.git")

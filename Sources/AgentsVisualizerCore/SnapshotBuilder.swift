@@ -160,7 +160,9 @@ public final class SnapshotBuilder {
         url.deletingLastPathComponent().lastPathComponent.hasPrefix("ssh-")
     }
 
-    static func sessionOrder(_ lhs: SessionInfo, _ rhs: SessionInfo) -> Bool {
+    /// Most urgent first, then most recent. Ends on `id` so the order is total: the menu bar and the dashboard
+    /// would otherwise shuffle sessions that tie, on every refresh.
+    public static func sessionOrder(_ lhs: SessionInfo, _ rhs: SessionInfo) -> Bool {
         if lhs.status.urgency != rhs.status.urgency { return lhs.status.urgency < rhs.status.urgency }
         if lhs.lastActivityAt != rhs.lastActivityAt {
             return (lhs.lastActivityAt ?? .distantPast) > (rhs.lastActivityAt ?? .distantPast)

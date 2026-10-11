@@ -36,7 +36,7 @@ struct MenuBarPanel: View {
         let live = model.snapshot.projects.flatMap { project in
             project.sessions.filter { $0.status.isLive || $0.isUnread }.map { (project, $0) }
         }
-        .sorted { SnapshotOrdering.urgentFirst($0.1, $1.1) }
+        .sorted { SnapshotBuilder.sessionOrder($0.1, $1.1) }
 
         VStack(alignment: .leading, spacing: 0) {
             SummaryStrip(snapshot: model.snapshot, compact: true)
@@ -101,12 +101,5 @@ struct MenuBarPanel: View {
     private func showDashboard() {
         openWindow(id: DashboardView.windowID)
         NSApp.activate(ignoringOtherApps: true)
-    }
-}
-
-enum SnapshotOrdering {
-    static func urgentFirst(_ lhs: SessionInfo, _ rhs: SessionInfo) -> Bool {
-        if lhs.status.urgency != rhs.status.urgency { return lhs.status.urgency < rhs.status.urgency }
-        return (lhs.lastActivityAt ?? .distantPast) > (rhs.lastActivityAt ?? .distantPast)
     }
 }
