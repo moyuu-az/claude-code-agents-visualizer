@@ -11,6 +11,8 @@ Each release on GitHub uses its section below as release notes.
 - **Unread sessions**: sessions that finished while you were looking elsewhere get the same unread dot as in
   Claude for Mac's sidebar, and an *Unread* counter appears at the top. They show in every time range and in the
   menu bar until you open them in Claude for Mac. The list is read from Claude for Mac's Local Storage.
+  A reply waits for you there, so unread sessions move to the top: on the graph with their project, on the dashboard
+  and in the menu bar right after the sessions that need you. They get an outline and a *Reply waiting to be read* line.
 
 ### Changed
 

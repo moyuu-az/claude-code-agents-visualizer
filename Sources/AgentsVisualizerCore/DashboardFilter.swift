@@ -35,6 +35,10 @@ public enum DashboardFilter {
     /// first. Status, activity and sessions ending never move anything, and a new session goes to the end: on the
     /// two-column graph, one inserted at the top would move every other session to the other column. The snapshot's
     /// urgency order follows status and last activity, which change every few seconds.
+    ///
+    /// The one exception is a reply waiting to be read: the session goes to the top of its project and the project to
+    /// the top of the graph, where it is seen first. That moves the graph only twice per reply, when the turn finishes
+    /// while you look elsewhere and when you open the session, unlike a status that flips with every permission prompt.
     public static func stableOrder(_ projects: [ProjectGroup]) -> [ProjectGroup] {
         projects
             // A fixed starting order, not the snapshot's: `localizedStandardCompare` is not transitive for names with
@@ -42,7 +46,9 @@ public enum DashboardFilter {
             .sorted { $0.id < $1.id }
             .map { ProjectGroup(id: $0.id, name: $0.name, sessions: $0.sessions.sorted(by: stableSessionOrder)) }
             .sorted { lhs, rhs in
-                switch lhs.name.localizedStandardCompare(rhs.name) {
+                let (lhsUnread, rhsUnread) = (lhs.unreadCount > 0, rhs.unreadCount > 0)
+                if lhsUnread != rhsUnread { return lhsUnread }
+                return switch lhs.name.localizedStandardCompare(rhs.name) {
                 case .orderedAscending: true
                 case .orderedDescending: false
                 case .orderedSame: lhs.id < rhs.id
@@ -51,6 +57,7 @@ public enum DashboardFilter {
     }
 
     static func stableSessionOrder(_ lhs: SessionInfo, _ rhs: SessionInfo) -> Bool {
+        if lhs.isUnread != rhs.isUnread { return lhs.isUnread }
         // An unknown start sorts last, with the sessions that have just appeared.
         let (lhsStart, rhsStart) = (lhs.startedAt ?? .distantFuture, rhs.startedAt ?? .distantFuture)
         if lhsStart != rhsStart { return lhsStart < rhsStart }
