@@ -505,8 +505,9 @@ import Testing
             ProjectGroup(id: "/busy", name: "busy", sessions: [session("b", .running)]),
             ProjectGroup(id: "/read", name: "read", sessions: [session("r", .idle, unread: true, ago: 3000)]),
             ProjectGroup(id: "/quiet", name: "quiet", sessions: [session("q", .idle)]),
+            ProjectGroup(id: "/blocked", name: "blocked", sessions: [session("x", .needsInput, ago: 9000)]),
         ]
-        #expect(projects.sorted(by: SnapshotBuilder.projectOrder).map(\.id) == ["/read", "/busy", "/quiet"])
+        #expect(projects.sorted(by: SnapshotBuilder.projectOrder).map(\.id) == ["/blocked", "/read", "/busy", "/quiet"])
     }
 
     @Test func repeatedBuildsAreStableAndPickUpChanges() throws {

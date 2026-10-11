@@ -137,6 +137,37 @@ import Testing
         #expect(DashboardFilter.stableOrder(projects).map(\.id) == ["/m", "/z", "/a", "/b"])
     }
 
+    /// Around an unread session the rest still stays put: other sessions' status flips, the unread one ending and a
+    /// new session (appended as always) move nothing.
+    @Test func onlyReadingMovesAnythingAroundAnUnreadSession() {
+        let before = ProjectGroup(id: "/repo", name: "repo", sessions: [
+            session("a", .idle, startedMinutesAgo: 30), session("b", .idle, startedMinutesAgo: 20, unread: true),
+            session("c", .running, startedMinutesAgo: 10),
+        ])
+        let after = ProjectGroup(id: "/repo", name: "repo", sessions: [
+            session("new", .running, startedMinutesAgo: 0), session("c", .needsInput, startedMinutesAgo: 10),
+            session("a", .running, startedMinutesAgo: 30), session("b", .ended, startedMinutesAgo: 20, unread: true),
+        ])
+        #expect(ids(DashboardFilter.stableOrder([before])) == [["b", "a", "c"]])
+        #expect(ids(DashboardFilter.stableOrder([after])) == [["b", "a", "c", "new"]])
+    }
+
+    /// A project stays on top while any of its sessions is unread, and goes back to name order with the last one read.
+    @Test func readingTheLastUnreadSessionPutsTheProjectBack() {
+        func projects(unread: Set<String>) -> [ProjectGroup] {
+            [
+                ProjectGroup(id: "/a", name: "a", sessions: [session("a1", .needsInput, startedMinutesAgo: 9)]),
+                ProjectGroup(id: "/z", name: "z", sessions: [
+                    session("z1", .idle, startedMinutesAgo: 8, unread: unread.contains("z1")),
+                    session("z2", .ended, startedMinutesAgo: 7, unread: unread.contains("z2")),
+                ]),
+            ]
+        }
+        #expect(DashboardFilter.stableOrder(projects(unread: ["z1", "z2"])).map(\.id) == ["/z", "/a"])
+        #expect(DashboardFilter.stableOrder(projects(unread: ["z2"])).map(\.id) == ["/z", "/a"])
+        #expect(DashboardFilter.stableOrder(projects(unread: [])).map(\.id) == ["/a", "/z"])
+    }
+
     /// The snapshot hands projects over in urgency order, which changes with every status flip. `localizedStandardCompare`
     /// is not transitive for names with ignorable characters (`ａｐｐ` < `app\u{200B}` < `\u{200B}app` < `ａｐｐ`), and
     /// what a sort makes of such a cycle depends on the order it is given.
@@ -152,6 +183,16 @@ import Testing
             }
         }
         #expect(Set(permutations(projects).map { DashboardFilter.stableOrder($0).map(\.id) }).count == 1)
+
+        // The same with one of the cycle unread: moving it to the top must not make the rest depend on the input.
+        let withUnread = projects.map { project in
+            project.id != "/1" ? project : ProjectGroup(id: project.id, name: project.name, sessions: [
+                session("s1", .idle, startedMinutesAgo: 1, unread: true),
+            ])
+        }
+        let orders = Set(permutations(withUnread).map { DashboardFilter.stableOrder($0).map(\.id) })
+        #expect(orders.count == 1)
+        #expect(orders.first?.first == "/1")
     }
 
     @Test func emptyInputStaysEmpty() {

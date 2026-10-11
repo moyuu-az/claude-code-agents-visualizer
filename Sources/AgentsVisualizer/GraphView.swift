@@ -296,6 +296,10 @@ private struct ProjectNode: View {
             Label("\(project.unreadCount)", systemImage: Color.unreadSymbol)
                 .font(.caption2.weight(.semibold)).foregroundStyle(Color.unread)
                 .help(Text("Unread"))
+                // VoiceOver would otherwise read the symbol name and the number.
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text("Unread"))
+                .accessibilityValue(Text(project.unreadCount, format: .number))
         }
     }
 
