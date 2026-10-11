@@ -6,13 +6,14 @@ import Testing
 @Suite struct GraphStableOrderTests {
     let now = Date(timeIntervalSince1970: 1_800_000_000)
 
-    func session(_ id: String, _ status: SessionStatus, startedMinutesAgo: Double?, activeMinutesAgo: Double = 0) -> SessionInfo {
+    func session(_ id: String, _ status: SessionStatus, startedMinutesAgo: Double?, activeMinutesAgo: Double = 0,
+                 unread: Bool = false) -> SessionInfo {
         SessionInfo(
             id: id, desktopSessionId: nil, title: id, status: status, waitingFor: nil, surface: .desktop, sshHost: nil,
             cwd: "/repo", worktreeName: nil, branch: nil, pid: nil,
             startedAt: startedMinutesAgo.map { now.addingTimeInterval(-$0 * 60) },
             lastActivityAt: now.addingTimeInterval(-activeMinutesAgo * 60), activity: nil, agents: [], pullRequests: [],
-            transcriptPath: nil)
+            transcriptPath: nil, isUnread: unread)
     }
 
     func ids(_ projects: [ProjectGroup]) -> [[String]] { projects.map { $0.sessions.map(\.id) } }
@@ -97,6 +98,43 @@ import Testing
         ]
         #expect(DashboardFilter.stableOrder(before).map(\.id) == ["/a", "/b"])
         #expect(DashboardFilter.stableOrder(after).map(\.id) == ["/a", "/b"])
+    }
+
+    /// A reply waiting to be read is the one thing that moves a session: to the top of its project, ahead of older
+    /// sessions, which keep their order among themselves.
+    @Test func unreadSessionsGoFirstInTheirProject() {
+        let project = ProjectGroup(id: "/repo", name: "repo", sessions: [
+            session("old", .idle, startedMinutesAgo: 300),
+            session("new-unread", .ended, startedMinutesAgo: 5, unread: true),
+            session("mid", .running, startedMinutesAgo: 100),
+            session("old-unread", .idle, startedMinutesAgo: 600, unread: true),
+        ])
+        #expect(ids(DashboardFilter.stableOrder([project])) == [["old-unread", "new-unread", "old", "mid"]])
+    }
+
+    /// Opening the session in Claude marks it read, and it goes back where it was.
+    @Test func readingASessionPutsItBack() {
+        let sessions = { (unread: Bool) in [
+            session("a", .idle, startedMinutesAgo: 30), session("b", .idle, startedMinutesAgo: 20, unread: unread),
+            session("c", .running, startedMinutesAgo: 10),
+        ] }
+        let unread = ProjectGroup(id: "/repo", name: "repo", sessions: sessions(true))
+        let read = ProjectGroup(id: "/repo", name: "repo", sessions: sessions(false))
+        #expect(ids(DashboardFilter.stableOrder([unread])) == [["b", "a", "c"]])
+        #expect(ids(DashboardFilter.stableOrder([read])) == [["a", "b", "c"]])
+    }
+
+    /// Projects with something to read come first, in name order among themselves; the rest keep their name order.
+    @Test func projectsWithUnreadSessionsGoFirst() {
+        let projects = [
+            ProjectGroup(id: "/a", name: "a", sessions: [session("a1", .needsInput, startedMinutesAgo: 1)]),
+            ProjectGroup(id: "/z", name: "z", sessions: [
+                session("z1", .running, startedMinutesAgo: 9), session("z2", .ended, startedMinutesAgo: 5, unread: true),
+            ]),
+            ProjectGroup(id: "/m", name: "m", sessions: [session("m1", .idle, startedMinutesAgo: 3, unread: true)]),
+            ProjectGroup(id: "/b", name: "b", sessions: [session("b1", .running, startedMinutesAgo: 2)]),
+        ]
+        #expect(DashboardFilter.stableOrder(projects).map(\.id) == ["/m", "/z", "/a", "/b"])
     }
 
     /// The snapshot hands projects over in urgency order, which changes with every status flip. `localizedStandardCompare`

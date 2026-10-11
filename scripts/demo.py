@@ -62,7 +62,7 @@ SESSIONS = [
     ("payments-api", "Postgres 17 migration plan", "idle", "desktop", 48, None, [
         ("Plan", "Order the migration steps", "done", 52), ("Explore", "Find raw SQL queries", "done", 55),
         ("code-reviewer", "Review lock timeouts", "done", 50),
-    ], {"branch": "chore/pg17"}),
+    ], {"branch": "chore/pg17", "unread": True}),
     ("mobile-app", "Release notes for 3.2", "idle", "desktop", 12, None, [], {"pr": (311, "MERGED"), "unread": True}),
     ("mobile-app", "Crash in onboarding flow", "ended", "cli", 190, None, [], {}),
     ("infra", "Terraform drift check", "ended", "cli", 320, None, [], {}),

@@ -276,8 +276,8 @@ private struct ProjectNode: View {
         }
         .padding(10)
         .frame(width: GraphCanvas.geometry.projectWidth, alignment: .leading)
-        .glassSurface(RoundedRectangle(cornerRadius: 16, style: .continuous),
-                      tint: top == .needsInput ? Color.orange.opacity(0.14) : nil)
+        .glassSurface(RoundedRectangle(cornerRadius: 16, style: .continuous), tint: project.attentionTint)
+        .overlay { if project.unreadCount > 0 { UnreadOutline(cornerRadius: 16) } }
         .help(Text(verbatim: project.path))
     }
 
@@ -291,6 +291,11 @@ private struct ProjectNode: View {
                 }
                 .help(Text(status.label))
             }
+        }
+        if project.unreadCount > 0 {
+            Label("\(project.unreadCount)", systemImage: Color.unreadSymbol)
+                .font(.caption2.weight(.semibold)).foregroundStyle(Color.unread)
+                .help(Text("Unread"))
         }
     }
 
@@ -341,6 +346,9 @@ private struct SessionNode: View {
                     }
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.orange)
+                } else if session.isUnread {
+                    // Over the activity line: the card has room for one, and a reply to read matters more.
+                    UnreadReplyLabel()
                 } else if let activity = session.activity {
                     ShimmerText(text: activity, shimmers: false)
                         .accessibilityRepresentation { Text(verbatim: activity) }
@@ -358,6 +366,7 @@ private struct SessionNode: View {
                 }
             }
             .glassSurface(RoundedRectangle(cornerRadius: 14, style: .continuous), tint: tint, interactive: true)
+            .overlay { if session.isUnread { UnreadOutline(cornerRadius: 14) } }
             .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .buttonStyle(.plain)
@@ -370,7 +379,7 @@ private struct SessionNode: View {
         switch session.status {
         case .needsInput: .orange.opacity(0.16)
         case .running: .green.opacity(0.10)
-        case .idle, .ended: nil
+        case .idle, .ended: session.isUnread ? Color.unread.opacity(0.18) : nil
         }
     }
 }

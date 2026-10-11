@@ -483,6 +483,32 @@ import Testing
         #expect(build(alive: [1, 2, 3]).projects.map(\.name) == ["busy", "idle-new", "idle-old"])
     }
 
+    /// Unread means a reply waits for you, so it outranks sessions that are only working; a blocked session still
+    /// comes first. Applies to sessions in a project and to projects on the dashboard page.
+    @Test func unreadSessionsRankRightAfterSessionsBlockedOnYou() {
+        func session(_ id: String, _ status: SessionStatus, unread: Bool = false, ago: Double = 0) -> SessionInfo {
+            SessionInfo(
+                id: id, desktopSessionId: nil, title: id, status: status, waitingFor: nil, surface: .desktop, sshHost: nil,
+                cwd: "/repo", worktreeName: nil, branch: nil, pid: nil, startedAt: nil,
+                lastActivityAt: now.addingTimeInterval(-ago), activity: nil, agents: [], pullRequests: [],
+                transcriptPath: nil, isUnread: unread)
+        }
+        let sessions = [
+            session("ended", .ended, ago: 1), session("running", .running, ago: 0), session("idle", .idle, ago: 2),
+            session("unread-ended", .ended, unread: true, ago: 600), session("blocked", .needsInput, ago: 900),
+            session("unread-idle", .idle, unread: true, ago: 30),
+        ]
+        #expect(sessions.sorted(by: SnapshotBuilder.sessionOrder).map(\.id)
+                == ["blocked", "unread-idle", "unread-ended", "running", "idle", "ended"])
+
+        let projects = [
+            ProjectGroup(id: "/busy", name: "busy", sessions: [session("b", .running)]),
+            ProjectGroup(id: "/read", name: "read", sessions: [session("r", .idle, unread: true, ago: 3000)]),
+            ProjectGroup(id: "/quiet", name: "quiet", sessions: [session("q", .idle)]),
+        ]
+        #expect(projects.sorted(by: SnapshotBuilder.projectOrder).map(\.id) == ["/read", "/busy", "/quiet"])
+    }
+
     @Test func repeatedBuildsAreStableAndPickUpChanges() throws {
         let repo = fixture.url("code/app").path
         try fixture.makeDirectory("code/app/.git")

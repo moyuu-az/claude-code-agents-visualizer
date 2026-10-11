@@ -123,7 +123,7 @@ struct SummaryStrip: View {
                 }
                 // Only while there is something to read, so it stands out when it appears.
                 if unread > 0 {
-                    Counter(value: unread, label: Text("Unread"), color: .accentColor, symbol: "circle.fill", compact: compact)
+                    Counter(value: unread, label: Text("Unread"), color: .unread, symbol: Color.unreadSymbol, compact: compact)
                         .transition(.scale.combined(with: .opacity))
                 }
                 let agentsCounter = Counter(value: agents, label: compact ? Text("Agents") : Text("Agents running"),
@@ -202,7 +202,6 @@ struct ProjectCard: View {
     let project: ProjectGroup
 
     var body: some View {
-        let top = project.topStatus
         VStack(alignment: .leading, spacing: 0) {
             header
             VStack(alignment: .leading, spacing: 0) {
@@ -214,8 +213,8 @@ struct ProjectCard: View {
             .padding(.bottom, 6)
             .animation(.spring(response: 0.45, dampingFraction: 0.8), value: project.sessions.map(\.id))
         }
-        .glassSurface(RoundedRectangle(cornerRadius: 22, style: .continuous),
-                      tint: top == .needsInput ? Color.orange.opacity(0.14) : nil)
+        .glassSurface(RoundedRectangle(cornerRadius: 22, style: .continuous), tint: project.attentionTint)
+        .overlay { if project.unreadCount > 0 { UnreadOutline(cornerRadius: 22) } }
     }
 
     private var header: some View {
