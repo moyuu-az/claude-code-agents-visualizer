@@ -29,8 +29,8 @@ What was I doing in the other repo?"* This app answers that at a glance.
   | **Ended** | No live process holds the session. |
 - **Unread sessions**: a session that finished while you were looking elsewhere gets a dot, the same one as in
   Claude for Mac's sidebar, and an *Unread* counter appears at the top. Unread sessions show in every time range
-  and in the menu bar until you open them in Claude for Mac. A reply waits for you there, so they come right after
-  the sessions that need you, at the top of the dashboard, the graph and the menu bar, with an outline and a
+  and in the menu bar until you open them in Claude for Mac. A reply waits for you there, so they move to the top
+  (on the dashboard and in the menu bar right after the sessions that need you), with an outline and a
   *Reply waiting to be read* line. Sessions started in a terminal or IDE are never marked unread: Claude for Mac
   does not track them.
 - **Subagents of live sessions** as a tree under the session: type, description, live stopwatch, what the agent is
